@@ -119,12 +119,11 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = ['Kode Menu', 'Nama Menu', 'Kategori', 'HPP Modal', 'Harga Jual'];
+    const headers = ['Kode Menu', 'Nama Menu', 'Kategori', 'Harga Jual'];
     const rows = products.map((p) => [
       `"${p.barcode}"`,
       `"${p.name.replace(/"/g, '""')}"`,
       `"${p.category}"`,
-      p.buyPrice,
       p.price
     ]);
 
@@ -138,13 +137,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     document.body.removeChild(link);
   };
 
-  const avgMarginPercent = products.length > 0
-    ? Math.round(
-        products.reduce((acc, p) => {
-          const margin = p.price > 0 && p.buyPrice > 0 ? ((p.price - p.buyPrice) / p.price) * 100 : 0;
-          return acc + margin;
-        }, 0) / products.length
-      )
+  const avgSellingPrice = products.length > 0
+    ? Math.round(products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length)
     : 0;
 
   return (
@@ -157,7 +151,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
             Katalog Menu & Harga
           </h1>
           <p className="text-xs text-[#7D6F63] mt-0.5">
-            Daftar minuman, pastry, dan makanan beserta HPP serta harga jual.
+            Daftar minuman, pastry, dan makanan beserta harga jual kasir.
           </p>
         </div>
 
@@ -219,8 +213,10 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         </div>
 
         <div className="p-3 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
-          <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Rata Margin</span>
-          <div className="text-lg sm:text-2xl font-extrabold text-[#285A3B] mt-1 tabular-nums">{avgMarginPercent}%</div>
+          <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Rata-rata Harga</span>
+          <div className="text-sm sm:text-xl font-extrabold text-[#285A3B] mt-1 tabular-nums truncate">
+            {PrinterService.formatRupiah(avgSellingPrice)}
+          </div>
         </div>
       </div>
 
@@ -275,9 +271,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                   <div className="font-bold text-xs text-[#1F1A17] mt-1 truncate">{prod.name}</div>
                   <div className="text-xs font-extrabold text-[#1F1A17] mt-0.5 tabular-nums">
                     {PrinterService.formatRupiah(prod.price)}
-                    <span className="text-[11px] font-normal text-[#7D6F63] ml-1.5">
-                      (HPP: {PrinterService.formatRupiah(prod.buyPrice)})
-                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -325,7 +318,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                 <th className="py-3 px-4">Kode</th>
                 <th className="py-3 px-4">Nama Menu</th>
                 <th className="py-3 px-4">Kategori</th>
-                <th className="py-3 px-4 text-right">HPP / Modal</th>
                 <th className="py-3 px-4 text-right">Harga Jual</th>
                 <th className="py-3 px-4 text-center">Satuan</th>
                 <th className="py-3 px-4 text-center">Aksi</th>
@@ -334,7 +326,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
             <tbody className="divide-y divide-[#EFE9DF] text-[#1F1A17]">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-[#8C7E71]">
+                  <td colSpan={6} className="py-10 text-center text-[#8C7E71]">
                     Tidak ada menu yang cocok dengan pencarian.
                   </td>
                 </tr>
@@ -353,9 +345,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                         <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#EFE9DF] text-[#4D423A]">
                           {prod.category}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-right text-[#7D6F63] tabular-nums">
-                        {PrinterService.formatRupiah(prod.buyPrice)}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-[#1F1A17] tabular-nums">
                         {PrinterService.formatRupiah(prod.price)}

@@ -22,7 +22,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const [category, setCategory] = useState('Coffee');
   const [newCategory, setNewCategory] = useState('');
   const [isAddingCategory, setIsAddingCategory] = useState(false);
-  const [buyPrice, setBuyPrice] = useState<number>(0);
   const [price, setPrice] = useState<number>(0);
   const [unit, setUnit] = useState('cup');
 
@@ -31,14 +30,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       setName(productToEdit.name);
       setBarcode(productToEdit.barcode);
       setCategory(productToEdit.category || 'Coffee');
-      setBuyPrice(productToEdit.buyPrice || 0);
       setPrice(productToEdit.price || 0);
       setUnit(productToEdit.unit || 'cup');
     } else {
       setName('');
       setBarcode('');
       setCategory(categories[0] || 'Coffee');
-      setBuyPrice(0);
       setPrice(0);
       setUnit('cup');
     }
@@ -66,7 +63,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         name: name.trim(),
         barcode: finalCode,
         category: finalCategory,
-        buyPrice: Number(buyPrice) || 0,
+        buyPrice: productToEdit?.buyPrice || 0,
         price: Number(price) || 0,
         stock: 999, // Unlimited stock for cafe food & beverages
         minStock: 0,
@@ -77,10 +74,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     );
     onClose();
   };
-
-  // Margin calculation
-  const margin = price > 0 ? price - buyPrice : 0;
-  const marginPercent = buyPrice > 0 ? Math.round((margin / buyPrice) * 100) : 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-[#26201C]/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
@@ -194,49 +187,22 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             )}
           </div>
 
-          {/* Pricing: Modal HPP & Harga Jual */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-[#3D322A] mb-1.5">
-                Biaya Bahan / HPP (Rp):
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="500"
-                value={buyPrice || ''}
-                onChange={(e) => setBuyPrice(parseFloat(e.target.value) || 0)}
-                placeholder="0"
-                className="w-full px-4 py-2.5 bg-[#F5F2EB] border border-[#D5C9B8] rounded-xl text-xs text-[#26201C] font-semibold focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2D241E]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[#3D322A] mb-1.5">
-                Harga Jual Kasir (Rp): <span className="text-[#9A3B3B]">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                min="0"
-                step="500"
-                value={price || ''}
-                onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
-                placeholder="0"
-                className="w-full px-4 py-2.5 bg-[#F5F2EB] border border-[#D5C9B8] rounded-xl text-xs font-black text-[#26201C] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2D241E]"
-              />
-            </div>
+          {/* Pricing: Harga Jual */}
+          <div>
+            <label className="block text-xs font-bold text-[#3D322A] mb-1.5">
+              Harga Jual Kasir (Rp): <span className="text-[#9A3B3B]">*</span>
+            </label>
+            <input
+              type="number"
+              required
+              min="0"
+              step="500"
+              value={price || ''}
+              onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+              placeholder="0"
+              className="w-full px-4 py-2.5 bg-[#F5F2EB] border border-[#D5C9B8] rounded-xl text-xs font-black text-[#26201C] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2D241E]"
+            />
           </div>
-
-          {/* Margin info bar */}
-          {price > 0 && (
-            <div className="p-3 bg-[#EDE6DC]/60 border border-[#DFD5C6] rounded-2xl text-xs flex items-center justify-between text-[#5C4F45]">
-              <span className="font-medium">Estimasi Margin Keuntungan:</span>
-              <span className="font-bold text-[#285A3B]">
-                Rp {margin.toLocaleString('id-ID')} ({marginPercent}%)
-              </span>
-            </div>
-          )}
 
           {/* Serving Unit */}
           <div>

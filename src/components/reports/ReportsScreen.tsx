@@ -101,14 +101,6 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
   const cashTotal = completedInScope.filter((t) => t.paymentMethod === 'CASH').reduce((acc, t) => acc + t.total, 0);
   const nonCashTotal = totalRevenue - cashTotal;
 
-  // Calculate Profit: Revenue - Cost
-  let totalCost = 0;
-  for (const tx of completedInScope) {
-    for (const item of tx.items) {
-      totalCost += (item.buyPrice || 0) * item.quantity;
-    }
-  }
-  const grossProfit = Math.max(0, totalRevenue - totalCost);
   const avgOrderValue = completedInScope.length > 0 ? Math.round(totalRevenue / completedInScope.length) : 0;
 
   // Best Selling Items calculation
@@ -271,47 +263,40 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
       </div>
 
       {/* KPI Cards */}
-      {(() => {
-        const showProfit = userRole === 'OWNER' || !!settings.security?.cashierCanViewReports;
-        return (
-          <div className={`grid grid-cols-2 ${showProfit ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-2.5 sm:gap-3 mb-4 sm:mb-5`}>
-            <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
-              <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">
-                Omzet {shiftFilter !== 'ALL' ? `(${shiftFilter})` : ''}
-              </span>
-              <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums tracking-tight truncate">
-                {PrinterService.formatRupiah(totalRevenue)}
-              </div>
-              <div className="text-[10px] sm:text-[11px] text-[#7D6F63] mt-1 tabular-nums">
-                Tunai: {PrinterService.formatRupiah(cashTotal)} • Non-Tunai: {PrinterService.formatRupiah(nonCashTotal)}
-              </div>
-            </div>
-
-            {showProfit && (
-              <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
-                <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Estimasi Laba</span>
-                <div className="text-base sm:text-2xl font-extrabold text-[#285A3B] mt-1 tabular-nums tracking-tight truncate">
-                  {PrinterService.formatRupiah(grossProfit)}
-                </div>
-              </div>
-            )}
-
-            <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
-              <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Transaksi</span>
-              <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums tracking-tight">
-                {filteredByShift.length} <span className="text-xs font-medium text-[#8C7E71]">struk</span>
-              </div>
-            </div>
-
-            <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
-              <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Rata-rata</span>
-              <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums tracking-tight truncate">
-                {PrinterService.formatRupiah(avgOrderValue)}
-              </div>
-            </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-4 sm:mb-5">
+        <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
+          <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">
+            Omzet {shiftFilter !== 'ALL' ? `(${shiftFilter})` : ''}
+          </span>
+          <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums tracking-tight truncate">
+            {PrinterService.formatRupiah(totalRevenue)}
           </div>
-        );
-      })()}
+          <div className="text-[10px] sm:text-[11px] text-[#7D6F63] mt-1 tabular-nums truncate">
+            Rata-rata: {PrinterService.formatRupiah(avgOrderValue)} / struk
+          </div>
+        </div>
+
+        <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
+          <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Pembayaran Tunai</span>
+          <div className="text-base sm:text-2xl font-extrabold text-[#285A3B] mt-1 tabular-nums tracking-tight truncate">
+            {PrinterService.formatRupiah(cashTotal)}
+          </div>
+        </div>
+
+        <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
+          <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Non-Tunai / QRIS</span>
+          <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums tracking-tight truncate">
+            {PrinterService.formatRupiah(nonCashTotal)}
+          </div>
+        </div>
+
+        <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
+          <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Transaksi</span>
+          <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums tracking-tight">
+            {filteredByShift.length} <span className="text-xs font-medium text-[#8C7E71]">struk</span>
+          </div>
+        </div>
+      </div>
 
       {/* Top 5 Products Bar */}
       {topProducts.length > 0 && (

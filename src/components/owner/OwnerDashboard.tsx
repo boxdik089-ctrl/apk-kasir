@@ -403,11 +403,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   key: 'cashierCanEditMenu' as const,
                   title: 'Izinkan Kasir Edit / Hapus Harga Menu',
                   desc: 'Sebaiknya MATI agar kasir tidak mengubah harga jual seenaknya.'
-                },
-                {
-                  key: 'cashierCanViewReports' as const,
-                  title: 'Tampilkan Estimasi Laba Kotor ke Karyawan',
-                  desc: 'Laporan omzet & cetak ulang tetap bisa dibuka karyawan; opsi ini mengatur apakah estimasi laba (HPP) ditampilkan.'
                 }
               ].map((item) => {
                 const checked = !!security[item.key];
