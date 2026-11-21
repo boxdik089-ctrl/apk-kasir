@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, X, Delete, AlertCircle } from 'lucide-react';
+import { Shield, X, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { DEFAULT_OWNER_PIN_HASH } from '../../utils/hash';
 import { SyncService } from '../../services/syncService';
 
@@ -19,67 +19,41 @@ export const OwnerPinModal: React.FC<OwnerPinModalProps> = ({
   isOpen,
   onClose,
   onVerified,
-  title = 'Verifikasi Akun Owner',
-  description = 'Masukkan PIN khusus Owner untuk melanjutkan.',
+  title = 'Masuk Akun Owner',
+  description = 'Masukkan sandi Owner untuk membuka dashboard dan pengaturan.',
   requireReason = false,
-  reasonPlaceholder = 'Contoh: Salah input menu / Tamu batal memesan',
+  reasonPlaceholder = 'Tulis alasan...',
   currentPinHash,
   actorName = 'Owner'
 }) => {
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
 
-  const isUsingDefaultPin = !currentPinHash || currentPinHash === DEFAULT_OWNER_PIN_HASH;
+  const isUsingDefaultPassword = !currentPinHash || currentPinHash === DEFAULT_OWNER_PIN_HASH;
 
   useEffect(() => {
     if (isOpen) {
-      setPin('');
+      setPassword('');
+      setShowPassword(false);
       setReason('');
       setError(null);
       setIsChecking(false);
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      } else if (e.key === 'Enter') {
-        const activeTag = document.activeElement?.tagName;
-        if (activeTag !== 'INPUT' || !requireReason) {
-          handleSubmit();
-        }
-      } else if (/^[0-9]$/.test(e.key) && document.activeElement?.tagName !== 'INPUT') {
-        setPin((prev) => (prev.length < 8 ? prev + e.key : prev));
-        setError(null);
-      } else if (e.key === 'Backspace' && document.activeElement?.tagName !== 'INPUT') {
-        setPin((prev) => prev.slice(0, -1));
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, pin, reason, requireReason]);
-
   if (!isOpen) return null;
 
-  const handleDigit = (digit: string) => {
-    if (pin.length < 8) {
-      setPin((prev) => prev + digit);
-      setError(null);
-    }
-  };
-
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (requireReason && !reason.trim()) {
       setError('Alasan wajib diisi sebelum melanjutkan.');
       return;
     }
-    if (pin.length < 4) {
-      setError('Masukkan minimal 4 digit PIN Owner.');
+    if (!password) {
+      setError('Masukkan sandi Owner terlebih dahulu.');
       return;
     }
 
@@ -87,30 +61,35 @@ export const OwnerPinModal: React.FC<OwnerPinModalProps> = ({
     setError(null);
     try {
       if (requireReason) {
-        // Caller (e.g. voidTransaction) verifies PIN and reason atomically on server
-        await onVerified(pin, reason.trim());
+        await onVerified(password, reason.trim());
         onClose();
       } else {
-        const res = await SyncService.verifyOwnerPin(pin, actorName);
+        const res = await SyncService.verifyOwnerPin(password, actorName);
         if (!res.ok) {
-          setError(res.error || 'PIN Owner salah.');
-          setPin('');
+          setError(res.error || 'Sandi Owner salah.');
+          setPassword('');
           return;
         }
-        await onVerified(pin);
+        await onVerified(password);
         onClose();
       }
     } catch (err: any) {
-      setError(err?.message || 'PIN Owner salah atau gagal verifikasi.');
-      setPin('');
+      setError(err?.message || 'Sandi Owner salah atau gagal verifikasi.');
+      setPassword('');
     } finally {
       setIsChecking(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#1F1A17]/55 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-[#FAF8F5] border border-[#E5DDD0] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-pop-in">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 bg-[#1F1A17]/55 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#FAF8F5] border border-[#E5DDD0] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-pop-in"
+      >
         <div className="px-5 py-4 border-b border-[#E5DDD0] flex items-center justify-between bg-[#F2ECE2]/70">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-[#2A211B] text-[#FAF8F5] flex items-center justify-center">
@@ -118,7 +97,7 @@ export const OwnerPinModal: React.FC<OwnerPinModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-[#1F1A17]">{title}</h2>
-              <p className="text-[11px] text-[#7D6F63]">Akses terbatas khusus pemilik usaha</p>
+              <p className="text-[11px] text-[#7D6F63]">Khusus pemilik usaha</p>
             </div>
           </div>
           <button
@@ -136,7 +115,7 @@ export const OwnerPinModal: React.FC<OwnerPinModalProps> = ({
           {requireReason && (
             <div>
               <label className="block text-xs font-bold text-[#3D332B] mb-1">
-                Alasan Pembatalan / Aksi <span className="text-[#9A3B3B]">*</span>
+                Alasan <span className="text-[#9A3B3B]">*</span>
               </label>
               <input
                 type="text"
@@ -152,65 +131,37 @@ export const OwnerPinModal: React.FC<OwnerPinModalProps> = ({
             </div>
           )}
 
-          {/* PIN Display */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-[#3D332B]">PIN Owner</label>
-              {isUsingDefaultPin && (
+              <label className="text-xs font-bold text-[#3D332B]">Sandi Owner</label>
+              {isUsingDefaultPassword && (
                 <span className="text-[11px] text-[#874C23] font-semibold">
-                  PIN bawaan: 123456
+                  Bawaan: 123456
                 </span>
               )}
             </div>
-            <input
-              type="password"
-              inputMode="numeric"
-              maxLength={8}
-              autoFocus={!requireReason}
-              value={pin}
-              onChange={(e) => {
-                setPin(e.target.value.replace(/[^0-9]/g, ''));
-                setError(null);
-              }}
-              placeholder="••••••"
-              className="w-full px-4 py-2.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-center text-xl font-mono tracking-[0.4em] text-[#1F1A17] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2A211B]"
-            />
-          </div>
-
-          {/* Numeric Keypad */}
-          <div className="grid grid-cols-3 gap-2">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+            <div className="relative">
+              <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9C8E80]" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                autoFocus={!requireReason}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError(null);
+                }}
+                placeholder="Ketik sandi Owner..."
+                className="w-full pl-9 pr-10 py-2.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-xl text-sm font-semibold text-[#1F1A17] placeholder-[#9C8E80] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2A211B]"
+              />
               <button
-                key={d}
                 type="button"
-                onClick={() => handleDigit(d)}
-                className="py-2.5 bg-[#EFE9DF] hover:bg-[#E5DDD0] active:scale-95 text-[#1F1A17] font-bold text-sm rounded-lg border border-[#E2D9CC] transition-all tabular-nums"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[#7D6F63] hover:text-[#1F1A17]"
+                title={showPassword ? 'Sembunyikan sandi' : 'Lihat sandi'}
               >
-                {d}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setPin('')}
-              className="py-2.5 bg-[#F6F3EC] hover:bg-[#EFE9DF] active:scale-95 text-[#7D6F63] font-semibold text-xs rounded-lg border border-[#E5DDD0] transition-all"
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDigit('0')}
-              className="py-2.5 bg-[#EFE9DF] hover:bg-[#E5DDD0] active:scale-95 text-[#1F1A17] font-bold text-sm rounded-lg border border-[#E2D9CC] transition-all tabular-nums"
-            >
-              0
-            </button>
-            <button
-              type="button"
-              onClick={() => setPin((prev) => prev.slice(0, -1))}
-              className="py-2.5 bg-[#F6F3EC] hover:bg-[#EFE9DF] active:scale-95 text-[#5E5248] rounded-lg border border-[#E5DDD0] flex items-center justify-center transition-all"
-              title="Hapus satu digit"
-            >
-              <Delete className="w-4 h-4" />
-            </button>
+            </div>
           </div>
 
           {error && (
@@ -224,16 +175,16 @@ export const OwnerPinModal: React.FC<OwnerPinModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 bg-[#FAF8F5] hover:bg-[#EFE9DF] text-[#5E5248] text-xs font-semibold rounded-lg border border-[#E5DDD0] transition-colors"
+              className="flex-1 py-2.5 bg-[#FAF8F5] hover:bg-[#EFE9DF] text-[#5E5248] text-xs font-semibold rounded-xl border border-[#E5DDD0] transition-colors"
             >
               Batal
             </button>
             <button
               type="submit"
-              disabled={isChecking || pin.length < 4}
-              className="flex-1 py-2.5 bg-[#2A211B] hover:bg-[#1A1410] text-[#FAF8F5] text-xs font-bold rounded-lg transition-colors disabled:opacity-40"
+              disabled={isChecking || !password}
+              className="flex-1 py-2.5 bg-[#2A211B] hover:bg-[#1A1410] text-[#FAF8F5] text-xs font-bold rounded-xl transition-colors disabled:opacity-40"
             >
-              {isChecking ? 'Memeriksa...' : 'Verifikasi'}
+              {isChecking ? 'Memeriksa...' : 'Masuk Owner'}
             </button>
           </div>
         </form>

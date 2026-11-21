@@ -146,7 +146,7 @@ const defaultStore = {
     security: {
       ownerPinHash: DEFAULT_PIN_HASH,
       cashierPinHash: DEFAULT_CASHIER_PIN_HASH,
-      requireCashierPin: false,
+      requireCashierPin: true,
       cashierCanAddMenu: true,
       cashierCanEditMenu: true,
       cashierCanViewReports: true,
@@ -236,6 +236,12 @@ function getLanUrls() {
 function verifyOwnerPin(pin) {
   if (!pin) return false;
   const targetHash = store.settings?.security?.ownerPinHash || DEFAULT_PIN_HASH;
+  return sha256(pin) === targetHash;
+}
+
+function verifyCashierPin(pin) {
+  if (!pin) return false;
+  const targetHash = store.settings?.security?.cashierPinHash || DEFAULT_CASHIER_PIN_HASH;
   return sha256(pin) === targetHash;
 }
 
@@ -386,22 +392,34 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, revision: store.revision, seeded: store.seeded });
     }
 
-    // 5. Verify Owner Login (No PIN required)
+    // 5. Verify Owner Password
     if (req.method === 'POST' && pathname === '/api/owner/verify') {
       const body = await readJsonBody(req);
-      appendAudit(body.actor || 'Owner', 'OWNER', 'OWNER_LOGIN', `Owner berhasil masuk dari ${body.device || 'perangkat'}`);
+      const ok = verifyOwnerPin(body.pin);
+      if (ok) {
+        appendAudit(body.actor || 'Owner', 'OWNER', 'OWNER_LOGIN', `Owner berhasil masuk dari ${body.device || 'perangkat'}`);
+        persistStore();
+        return sendJson(res, 200, { ok: true });
+      }
+      appendAudit(body.actor || 'Tidak Dikenal', 'CASHIER', 'OWNER_LOGIN_FAILED', `Percobaan sandi Owner salah dari ${body.device || 'perangkat'}`);
       persistStore();
-      return sendJson(res, 200, { ok: true });
+      return sendJson(res, 401, { ok: false, error: 'Sandi Owner salah.' });
     }
 
-    // 5b. Verify Cashier Login (No PIN required)
+    // 5b. Verify Cashier Login (Name + Shift + Password)
     if (req.method === 'POST' && pathname === '/api/cashier/verify') {
       const body = await readJsonBody(req);
       const cashierName = String(body.cashierName || '').trim() || 'Kasir';
       const shift = body.shift === 'Shift Siang' ? 'Shift Siang' : 'Shift Pagi';
-      appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cashierName} masuk ${shift} dari ${body.device || 'perangkat'}`);
+      const ok = verifyCashierPin(body.pin);
+      if (ok) {
+        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cashierName} masuk ${shift} dari ${body.device || 'perangkat'}`);
+        persistStore();
+        return sendJson(res, 200, { ok: true, cashierName, shift });
+      }
+      appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan sandi Kasir salah atas nama ${cashierName} (${shift}, ${body.device || 'perangkat'})`);
       persistStore();
-      return sendJson(res, 200, { ok: true, cashierName, shift });
+      return sendJson(res, 401, { ok: false, error: 'Sandi Kasir salah.' });
     }
 
     // 6. Add Transaction (Append-Only)

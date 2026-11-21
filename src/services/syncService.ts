@@ -206,11 +206,18 @@ class SyncServiceClass {
         await this.pullFromServer();
         return { ok: true };
       }
-      return { ok: false, error: data.error || 'Gagal login Owner.' };
+      return { ok: false, error: data.error || 'Sandi Owner salah.' };
     } catch {
-      await this.logLocalAudit(actor, 'OWNER', 'OWNER_LOGIN', `Login Owner offline (${deviceLabel})`);
+      const localSettings = await db.settings.get(1);
+      const expectedHash = localSettings?.security?.ownerPinHash || defaultSecuritySettings.ownerPinHash;
+      if (sha256(pin) === expectedHash) {
+        await this.logLocalAudit(actor, 'OWNER', 'OWNER_LOGIN', `Login Owner offline (${deviceLabel})`);
+        this.notifyListeners();
+        return { ok: true };
+      }
+      await this.logLocalAudit(actor, 'CASHIER', 'OWNER_LOGIN_FAILED', `Percobaan sandi Owner gagal (${deviceLabel})`);
       this.notifyListeners();
-      return { ok: true };
+      return { ok: false, error: 'Sandi Owner salah.' };
     }
   }
 
@@ -228,11 +235,18 @@ class SyncServiceClass {
         await this.pullFromServer();
         return { ok: true };
       }
-      return { ok: false, error: data.error || 'Gagal login Kasir.' };
+      return { ok: false, error: data.error || 'Sandi Kasir salah.' };
     } catch {
-      await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cleanName} masuk ${shift} offline (${deviceLabel})`);
+      const localSettings = await db.settings.get(1);
+      const expectedHash = localSettings?.security?.cashierPinHash || defaultSecuritySettings.cashierPinHash || sha256('1234');
+      if (sha256(pin) === expectedHash) {
+        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cleanName} masuk ${shift} offline (${deviceLabel})`);
+        this.notifyListeners();
+        return { ok: true };
+      }
+      await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan sandi Kasir gagal (${shift}, ${deviceLabel})`);
       this.notifyListeners();
-      return { ok: true };
+      return { ok: false, error: 'Sandi Kasir salah.' };
     }
   }
 

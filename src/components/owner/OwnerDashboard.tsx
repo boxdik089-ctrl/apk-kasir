@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Copy,
   Check,
+  KeyRound,
   RefreshCw,
   Globe,
   MonitorSmartphone
@@ -29,7 +30,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   settings,
   ownerPin,
   onUpdateSettings,
-  onUpdateOwnerPin: _onUpdateOwnerPin,
+  onUpdateOwnerPin,
   onLockBackToCashier
 }) => {
   const [health, setHealth] = useState<SyncHealthInfo | null>(null);
@@ -41,6 +42,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [tunnel, setTunnel] = useState<RemoteTunnelStatus>({ status: 'idle', url: null, ownerUrl: null });
   const [isTogglingTunnel, setIsTogglingTunnel] = useState(false);
+
+  const [newOwnerPw, setNewOwnerPw] = useState('');
+  const [ownerPwMsg, setOwnerPwMsg] = useState<string | null>(null);
+  const [newCashierPw, setNewCashierPw] = useState('');
+  const [cashierPwMsg, setCashierPwMsg] = useState<string | null>(null);
 
   const security: SecuritySettings = {
     ...defaultSecuritySettings,
@@ -134,6 +140,40 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       setCopiedUrl(text);
       setTimeout(() => setCopiedUrl(null), 2000);
     });
+  };
+
+  const handleChangeOwnerPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newOwnerPw.trim().length < 4) {
+      setOwnerPwMsg('Sandi Owner minimal 4 karakter.');
+      return;
+    }
+    const cleanPw = newOwnerPw.trim();
+    const res = await SyncService.updateSettings(settings, ownerPin, cleanPw);
+    if (res.ok) {
+      onUpdateOwnerPin(cleanPw);
+      setNewOwnerPw('');
+      setOwnerPwMsg('Sandi Owner berhasil diperbarui.');
+      setTimeout(() => setOwnerPwMsg(null), 4000);
+    } else {
+      setOwnerPwMsg(res.error || 'Gagal mengganti sandi Owner.');
+    }
+  };
+
+  const handleChangeCashierPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newCashierPw.trim().length < 4) {
+      setCashierPwMsg('Sandi Kasir minimal 4 karakter.');
+      return;
+    }
+    const res = await SyncService.updateSettings(settings, ownerPin, undefined, newCashierPw.trim());
+    if (res.ok) {
+      setNewCashierPw('');
+      setCashierPwMsg('Sandi Kasir berhasil diperbarui.');
+      setTimeout(() => setCashierPwMsg(null), 4000);
+    } else {
+      setCashierPwMsg(res.error || 'Gagal mengganti sandi Kasir.');
+    }
   };
 
   const alertActions = new Set(['VOID_TRANSACTION', 'DELETE_HELD_CART', 'OWNER_LOGIN_FAILED', 'CASHIER_LOGIN_FAILED', 'DB_RESTORED']);
@@ -321,15 +361,56 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Left: Remote Access & Mode Info */}
+          {/* Left: Password Management & Remote Access */}
           <div className="lg:col-span-5 space-y-4">
-            <div className={`${mobileSection === 'AUDIT' ? 'hidden' : 'block'} lg:block bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl p-4 sm:p-5 space-y-2`}>
-              <h2 className="text-xs font-bold text-[#1F1A17]">
-                Mode Akses Praktis (Tanpa PIN)
+            <div className={`${mobileSection === 'AUDIT' ? 'hidden' : 'block'} lg:block bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl p-4 sm:p-5 space-y-3`}>
+              <h2 className="text-xs font-bold text-[#1F1A17] flex items-center gap-1.5">
+                <KeyRound className="w-4 h-4 text-[#7A4B1A]" />
+                <span>Pengaturan Sandi Login</span>
               </h2>
               <p className="text-[11px] text-[#7D6F63] leading-relaxed">
-                Penambahan menu, edit harga Hot/Dingin, maupun pindah tab berjalan langsung tanpa PIN agar tidak menghambat pelayanan. Setiap aktivitas tetap tercatat otomatis di Audit Log.
+                Sandi hanya diminta saat login awal dan saat masuk Panel Owner. Tambah/edit menu tetap bebas agar pelayanan cepat.
               </p>
+
+              <form onSubmit={handleChangeOwnerPassword} className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-[#3D332B]">Ganti Sandi Owner</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={newOwnerPw}
+                    onChange={(e) => setNewOwnerPw(e.target.value)}
+                    placeholder="Sandi baru min. 4 karakter"
+                    className="flex-1 px-3 py-1.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-xs text-[#1F1A17]"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-[#2A211B] hover:bg-[#1A1410] text-[#FAF8F5] text-xs font-bold rounded-lg"
+                  >
+                    Simpan
+                  </button>
+                </div>
+                {ownerPwMsg && <div className="text-[11px] font-semibold text-[#285A3B]">{ownerPwMsg}</div>}
+              </form>
+
+              <form onSubmit={handleChangeCashierPassword} className="space-y-1.5 pt-2 border-t border-[#EAE3D7]">
+                <label className="block text-[11px] font-bold text-[#3D332B]">Ganti Sandi Kasir</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={newCashierPw}
+                    onChange={(e) => setNewCashierPw(e.target.value)}
+                    placeholder="Sandi baru min. 4 karakter"
+                    className="flex-1 px-3 py-1.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-xs text-[#1F1A17]"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-[#EFE9DF] hover:bg-[#E5DDD0] text-[#1F1A17] text-xs font-bold rounded-lg border border-[#D5C9B8]"
+                  >
+                    Simpan
+                  </button>
+                </div>
+                {cashierPwMsg && <div className="text-[11px] font-semibold text-[#285A3B]">{cashierPwMsg}</div>}
+              </form>
             </div>
 
             {/* Remote Access Card */}
