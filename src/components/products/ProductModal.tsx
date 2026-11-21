@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Coffee, Wand2 } from 'lucide-react';
-import type { Product } from '../../types';
+import { X, Save, Coffee, Wand2, Flame, Snowflake } from 'lucide-react';
+import type { Product, ProductVariant } from '../../types';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -22,6 +22,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const [category, setCategory] = useState('Coffee');
   const [newCategory, setNewCategory] = useState('');
   const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [hasVariants, setHasVariants] = useState(false);
+  const [hotPrice, setHotPrice] = useState<number>(0);
+  const [icePrice, setIcePrice] = useState<number>(0);
   const [price, setPrice] = useState<number>(0);
   const [unit, setUnit] = useState('cup');
 
@@ -30,12 +33,32 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       setName(productToEdit.name);
       setBarcode(productToEdit.barcode);
       setCategory(productToEdit.category || 'Coffee');
-      setPrice(productToEdit.price || 0);
+      const existingVariants = productToEdit.variants;
+      if (existingVariants && existingVariants.length > 0) {
+        setHasVariants(true);
+        const hot = existingVariants.find((v) => v.label.toLowerCase().includes('hot')) || existingVariants[0];
+        const ice =
+          existingVariants.find((v) => {
+            const l = v.label.toLowerCase();
+            return l.includes('dingin') || l.includes('ice');
+          }) || existingVariants[1];
+        setHotPrice(hot?.price || 0);
+        setIcePrice(ice?.price || 0);
+        setPrice(productToEdit.price || hot?.price || ice?.price || 0);
+      } else {
+        setHasVariants(false);
+        setHotPrice(0);
+        setIcePrice(0);
+        setPrice(productToEdit.price || 0);
+      }
       setUnit(productToEdit.unit || 'cup');
     } else {
       setName('');
       setBarcode('');
       setCategory(categories[0] || 'Coffee');
+      setHasVariants(false);
+      setHotPrice(0);
+      setIcePrice(0);
       setPrice(0);
       setUnit('cup');
     }
@@ -58,13 +81,31 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     const finalCode = barcode.trim() || ('MN-' + Math.floor(100 + Math.random() * 900));
     const finalCategory = isAddingCategory && newCategory.trim() ? newCategory.trim() : category;
 
+    let finalPrice = Number(price) || 0;
+    let finalVariants: ProductVariant[] = [];
+
+    if (hasVariants) {
+      const h = Number(hotPrice) || 0;
+      const d = Number(icePrice) || 0;
+      if (h <= 0 || d <= 0) {
+        alert('Isi harga versi Hot dan Dingin (masing-masing lebih dari 0).');
+        return;
+      }
+      finalVariants = [
+        { label: 'Hot', price: h },
+        { label: 'Dingin', price: d }
+      ];
+      finalPrice = Math.min(h, d);
+    }
+
     onSave(
       {
         name: name.trim(),
         barcode: finalCode,
         category: finalCategory,
         buyPrice: productToEdit?.buyPrice || 0,
-        price: Number(price) || 0,
+        price: finalPrice,
+        variants: finalVariants,
         stock: 999, // Unlimited stock for cafe food & beverages
         minStock: 0,
         unit: unit.trim() || 'cup',
@@ -187,21 +228,102 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             )}
           </div>
 
-          {/* Pricing: Harga Jual */}
-          <div>
-            <label className="block text-xs font-bold text-[#3D322A] mb-1.5">
-              Harga Jual Kasir (Rp): <span className="text-[#9A3B3B]">*</span>
-            </label>
-            <input
-              type="number"
-              required
-              min="0"
-              step="500"
-              value={price || ''}
-              onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
-              placeholder="0"
-              className="w-full px-4 py-2.5 bg-[#F5F2EB] border border-[#D5C9B8] rounded-xl text-xs font-black text-[#26201C] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2D241E]"
-            />
+          {/* Pricing Mode & Prices */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-[#3D322A] mb-1.5">
+                Tipe Harga Menu:
+              </label>
+              <div className="grid grid-cols-2 gap-2 p-1 bg-[#EDE6DC] rounded-xl border border-[#DFD5C6]">
+                <button
+                  type="button"
+                  onClick={() => setHasVariants(false)}
+                  className={`py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                    !hasVariants
+                      ? 'bg-[#2A211B] text-[#FAF8F5] shadow-2xs'
+                      : 'text-[#5C4F45] hover:text-[#26201C]'
+                  }`}
+                >
+                  1 Harga Standar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasVariants(true);
+                    if (hotPrice === 0 && price > 0) setHotPrice(price);
+                    if (icePrice === 0 && price > 0) setIcePrice(price);
+                  }}
+                  className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    hasVariants
+                      ? 'bg-[#2A211B] text-[#FAF8F5] shadow-2xs'
+                      : 'text-[#5C4F45] hover:text-[#26201C]'
+                  }`}
+                >
+                  <span>2 Versi (Hot & Dingin)</span>
+                </button>
+              </div>
+            </div>
+
+            {!hasVariants ? (
+              <div>
+                <label className="block text-xs font-bold text-[#3D322A] mb-1.5">
+                  Harga Jual Kasir (Rp): <span className="text-[#9A3B3B]">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="500"
+                  value={price || ''}
+                  onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-full px-4 py-2.5 bg-[#F5F2EB] border border-[#D5C9B8] rounded-xl text-xs font-black text-[#26201C] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2D241E]"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-2xl bg-[#F5EFE6] border border-[#E5D7C3]">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-[#7A4B1A] mb-1.5">
+                      <Flame className="w-3.5 h-3.5" />
+                      <span>Harga Hot / Panas (Rp)</span>
+                      <span className="text-[#9A3B3B]">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="500"
+                      value={hotPrice || ''}
+                      onChange={(e) => setHotPrice(parseFloat(e.target.value) || 0)}
+                      placeholder="Mis: 22000"
+                      className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#D5C9B8] rounded-xl text-xs font-black text-[#26201C] focus:outline-none focus:border-[#7A4B1A]"
+                    />
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-[#EEF4F8] border border-[#C9DCE8]">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-[#255478] mb-1.5">
+                      <Snowflake className="w-3.5 h-3.5" />
+                      <span>Harga Dingin / Ice (Rp)</span>
+                      <span className="text-[#9A3B3B]">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="500"
+                      value={icePrice || ''}
+                      onChange={(e) => setIcePrice(parseFloat(e.target.value) || 0)}
+                      placeholder="Mis: 25000"
+                      className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#B9D0E0] rounded-xl text-xs font-black text-[#26201C] focus:outline-none focus:border-[#255478]"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-[#786C61]">
+                  Di layar kasir, klik menu ini akan memunculkan pilihan <strong>Hot</strong> atau <strong>Dingin</strong> dengan harga masing-masing.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Serving Unit */}

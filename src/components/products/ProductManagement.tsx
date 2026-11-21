@@ -120,12 +120,18 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
   const handleExportCSV = () => {
     const headers = ['Kode Menu', 'Nama Menu', 'Kategori', 'Harga Jual'];
-    const rows = products.map((p) => [
-      `"${p.barcode}"`,
-      `"${p.name.replace(/"/g, '""')}"`,
-      `"${p.category}"`,
-      p.price
-    ]);
+    const rows = products.map((p) => {
+      const priceCell =
+        p.variants && p.variants.length > 0
+          ? `"${p.variants.map((v) => `${v.label}: ${v.price}`).join(' | ')}"`
+          : p.price;
+      return [
+        `"${p.barcode}"`,
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${p.category}"`,
+        priceCell
+      ];
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -269,9 +275,23 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                     <span className="text-[11px] font-mono text-[#8C7E71]">{prod.barcode}</span>
                   </div>
                   <div className="font-bold text-xs text-[#1F1A17] mt-1 truncate">{prod.name}</div>
-                  <div className="text-xs font-extrabold text-[#1F1A17] mt-0.5 tabular-nums">
-                    {PrinterService.formatRupiah(prod.price)}
-                  </div>
+                  {prod.variants && prod.variants.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      {prod.variants.map((v) => (
+                        <span
+                          key={v.label}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#F2ECE2] text-[#1F1A17] tabular-nums"
+                        >
+                          <span className="text-[#7D6F63] font-semibold">{v.label}:</span>
+                          {PrinterService.formatRupiah(v.price)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs font-extrabold text-[#1F1A17] mt-0.5 tabular-nums">
+                      {PrinterService.formatRupiah(prod.price)}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   <button
@@ -347,7 +367,18 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-[#1F1A17] tabular-nums">
-                        {PrinterService.formatRupiah(prod.price)}
+                        {prod.variants && prod.variants.length > 0 ? (
+                          <div className="inline-flex flex-col items-end gap-0.5">
+                            {prod.variants.map((v) => (
+                              <div key={v.label} className="text-[11px] font-bold text-[#1F1A17]">
+                                <span className="text-[#7D6F63] font-medium mr-1.5">{v.label}:</span>
+                                {PrinterService.formatRupiah(v.price)}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          PrinterService.formatRupiah(prod.price)
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center text-[#7D6F63]">
                         {prod.unit || 'cup'}

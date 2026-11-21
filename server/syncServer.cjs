@@ -535,11 +535,15 @@ const server = http.createServer(async (req, res) => {
       const saved = { ...product, id: nextId };
       store.products.push(saved);
       store.seeded = true;
+      const priceLabel =
+        Array.isArray(saved.variants) && saved.variants.length > 0
+          ? saved.variants.map((v) => `${v.label} Rp ${Number(v.price).toLocaleString('id-ID')}`).join(' / ')
+          : `Rp ${Number(saved.price).toLocaleString('id-ID')}`;
       appendAudit(
         body.actor || (isOwner ? 'Owner' : 'Kasir'),
         isOwner ? 'OWNER' : 'CASHIER',
         'MENU_CHANGED',
-        `Menambah menu "${saved.name}" (Rp ${Number(saved.price).toLocaleString('id-ID')})`
+        `Menambah menu "${saved.name}" (${priceLabel})`
       );
       persistStore();
       return sendJson(res, 201, { ok: true, product: saved, revision: store.revision });

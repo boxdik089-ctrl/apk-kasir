@@ -83,10 +83,14 @@ export const initialCafeProducts: Omit<Product, 'id'>[] = [
   },
   {
     barcode: 'CF02',
-    name: 'Caffe Latte Art (Hot/Ice)',
+    name: 'Caffe Latte Art',
     category: 'Coffee',
     buyPrice: 9000,
-    price: 26000,
+    price: 24000,
+    variants: [
+      { label: 'Hot', price: 24000 },
+      { label: 'Dingin', price: 26000 }
+    ],
     stock: 999,
     minStock: 0,
     unit: 'cup',
@@ -119,7 +123,11 @@ export const initialCafeProducts: Omit<Product, 'id'>[] = [
     name: 'Matcha Green Tea Latte',
     category: 'Non-Coffee',
     buyPrice: 10000,
-    price: 28000,
+    price: 26000,
+    variants: [
+      { label: 'Hot', price: 26000 },
+      { label: 'Dingin', price: 28000 }
+    ],
     stock: 999,
     minStock: 0,
     unit: 'cup',

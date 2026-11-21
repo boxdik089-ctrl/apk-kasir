@@ -9,9 +9,12 @@ import {
   User,
   Coffee,
   MessageSquarePlus,
-  Check
+  Check,
+  Flame,
+  Snowflake,
+  X
 } from 'lucide-react';
-import type { Product, CartItem, ReceiptSettings, HeldCart, UserRole, CashierShift } from '../../types';
+import type { Product, ProductVariant, CartItem, ReceiptSettings, HeldCart, UserRole, CashierShift } from '../../types';
 import { PrinterService } from '../../services/printerService';
 import { SyncService } from '../../services/syncService';
 import { PaymentModal } from './PaymentModal';
@@ -53,7 +56,8 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   const [orderType, setOrderType] = useState<'Dine-In' | 'Take Away'>('Dine-In');
   const [customerNote, setCustomerNote] = useState('');
   const [overallDiscount, setOverallDiscount] = useState<number>(0);
-  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
+  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
   
   // Modals
@@ -116,12 +120,29 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
     return matchesSearch && matchesCategory;
   });
 
-  const addToCart = (product: Product) => {
+  const getCartKey = (productId: number, variantLabel?: string) =>
+    `${productId}::${variantLabel || 'std'}`;
+
+  const handleSelectProduct = (product: Product) => {
+    if (product.variants && product.variants.length > 0) {
+      setVariantPickerProduct(product);
+      return;
+    }
+    addToCart(product);
+  };
+
+  const addToCart = (product: Product, variant?: ProductVariant) => {
+    const unitPrice = variant ? variant.price : product.price;
+    const itemName = variant ? `${product.name} (${variant.label})` : product.name;
+    const vLabel = variant?.label;
+
     setCart((prev) => {
-      const existing = prev.find((item) => item.productId === product.id);
+      const existing = prev.find(
+        (item) => item.productId === product.id && (item.variantLabel || '') === (vLabel || '')
+      );
       if (existing) {
         return prev.map((item) =>
-          item.productId === product.id
+          item.productId === product.id && (item.variantLabel || '') === (vLabel || '')
             ? {
                 ...item,
                 quantity: item.quantity + 1,
@@ -135,12 +156,13 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
         {
           productId: product.id!,
           barcode: product.barcode,
-          name: product.name,
+          name: itemName,
+          variantLabel: vLabel,
           buyPrice: product.buyPrice,
-          price: product.price,
+          price: unitPrice,
           quantity: 1,
           discount: 0,
-          subtotal: product.price
+          subtotal: unitPrice
         }
       ];
     });
@@ -155,20 +177,20 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
       );
 
       if (found) {
-        addToCart(found);
+        handleSelectProduct(found);
         setSearchQuery('');
       } else if (filteredProducts.length === 1) {
-        addToCart(filteredProducts[0]);
+        handleSelectProduct(filteredProducts[0]);
         setSearchQuery('');
       }
     }
   };
 
-  const updateQuantity = (productId: number, delta: number) => {
+  const updateQuantity = (productId: number, variantLabel: string | undefined, delta: number) => {
     setCart((prev) =>
       prev
         .map((item) => {
-          if (item.productId === productId) {
+          if (item.productId === productId && (item.variantLabel || '') === (variantLabel || '')) {
             const newQty = item.quantity + delta;
             if (newQty <= 0) return null;
             return {
@@ -183,16 +205,22 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
     );
   };
 
-  const updateItemNote = (productId: number, note: string) => {
+  const updateItemNote = (productId: number, variantLabel: string | undefined, note: string) => {
     setCart((prev) =>
       prev.map((item) =>
-        item.productId === productId ? { ...item, note: note.trim() || undefined } : item
+        item.productId === productId && (item.variantLabel || '') === (variantLabel || '')
+          ? { ...item, note: note.trim() || undefined }
+          : item
       )
     );
   };
 
-  const removeFromCart = (productId: number) => {
-    setCart((prev) => prev.filter((item) => item.productId !== productId));
+  const removeFromCart = (productId: number, variantLabel: string | undefined) => {
+    setCart((prev) =>
+      prev.filter(
+        (item) => !(item.productId === productId && (item.variantLabel || '') === (variantLabel || ''))
+      )
+    );
   };
 
   const clearCart = () => {
@@ -399,14 +427,16 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredProducts.map((prod) => {
-                const cartEntry = cart.find((c) => c.productId === prod.id);
-                const qtyInCart = cartEntry?.quantity || 0;
+                const qtyInCart = cart
+                  .filter((c) => c.productId === prod.id)
+                  .reduce((sum, c) => sum + c.quantity, 0);
+                const hasVariants = !!(prod.variants && prod.variants.length > 0);
 
                 return (
                   <button
                     key={prod.id}
                     type="button"
-                    onClick={() => addToCart(prod)}
+                    onClick={() => handleSelectProduct(prod)}
                     className={`relative p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all duration-150 group active:scale-[0.98] ${
                       qtyInCart > 0
                         ? 'bg-[#FDFBF7] border-[#2A211B] shadow-[0_2px_8px_rgba(42,33,27,0.06)]'
@@ -429,13 +459,30 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
                       <h3 className="font-bold text-[13px] text-[#1F1A17] line-clamp-2 leading-snug">
                         {prod.name}
                       </h3>
+
+                      {hasVariants && (
+                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#EFE9DF] text-[10px] font-semibold text-[#6D6055]">
+                          <span>Hot / Dingin</span>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="mt-4 pt-2.5 border-t border-[#EFE9DF] flex items-center justify-between">
-                      <span className="font-extrabold text-sm text-[#1F1A17] tabular-nums">
-                        {PrinterService.formatRupiah(prod.price)}
-                      </span>
-                      <span className="w-7 h-7 rounded-lg bg-[#EFE9DF] group-hover:bg-[#2A211B] text-[#5E5248] group-hover:text-[#FAF8F5] flex items-center justify-center transition-colors">
+                    <div className="mt-4 pt-2.5 border-t border-[#EFE9DF] flex items-center justify-between gap-2">
+                      {hasVariants ? (
+                        <div className="space-y-0.5 min-w-0">
+                          {prod.variants!.map((v) => (
+                            <div key={v.label} className="text-[11px] font-bold text-[#1F1A17] tabular-nums leading-tight truncate">
+                              <span className="text-[#7D6F63] font-semibold mr-1">{v.label}</span>
+                              {PrinterService.formatRupiah(v.price)}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="font-extrabold text-sm text-[#1F1A17] tabular-nums">
+                          {PrinterService.formatRupiah(prod.price)}
+                        </span>
+                      )}
+                      <span className="w-7 h-7 flex-shrink-0 rounded-lg bg-[#EFE9DF] group-hover:bg-[#2A211B] text-[#5E5248] group-hover:text-[#FAF8F5] flex items-center justify-center transition-colors">
                         <Plus className="w-3.5 h-3.5" />
                       </span>
                     </div>
@@ -568,10 +615,11 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
             </div>
           ) : (
             cart.map((item) => {
-              const isEditingThisNote = editingNoteId === item.productId;
+              const itemKey = getCartKey(item.productId, item.variantLabel);
+              const isEditingThisNote = editingNoteKey === itemKey;
               return (
                 <div
-                  key={item.productId}
+                  key={itemKey}
                   className="p-3 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl space-y-2 animate-slide-up"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -589,7 +637,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button
                         type="button"
-                        onClick={() => setEditingNoteId(isEditingThisNote ? null : item.productId)}
+                        onClick={() => setEditingNoteKey(isEditingThisNote ? null : itemKey)}
                         className={`p-1 rounded-md transition-colors ${
                           item.note || isEditingThisNote
                             ? 'text-[#874C23] bg-[#F6EBDD]'
@@ -601,7 +649,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => removeFromCart(item.productId)}
+                        onClick={() => removeFromCart(item.productId, item.variantLabel)}
                         className="p-1 text-[#9C8E80] hover:text-[#9A3B3B] hover:bg-[#FBEAE8] rounded-md transition-colors"
                         title="Hapus item"
                       >
@@ -619,21 +667,21 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
                         placeholder="Mis: Less Ice, Less Sugar, Oatmilk..."
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            updateItemNote(item.productId, (e.target as HTMLInputElement).value);
-                            setEditingNoteId(null);
+                            updateItemNote(item.productId, item.variantLabel, (e.target as HTMLInputElement).value);
+                            setEditingNoteKey(null);
                           } else if (e.key === 'Escape') {
-                            setEditingNoteId(null);
+                            setEditingNoteKey(null);
                           }
                         }}
                         onBlur={(e) => {
-                          updateItemNote(item.productId, e.target.value);
-                          setEditingNoteId(null);
+                          updateItemNote(item.productId, item.variantLabel, e.target.value);
+                          setEditingNoteKey(null);
                         }}
                         className="flex-1 px-2.5 py-1 bg-[#F2ECE2] border border-[#D5C9B8] rounded-md text-[11px] text-[#1F1A17] focus:outline-none focus:border-[#2A211B]"
                       />
                       <button
                         type="button"
-                        onClick={() => setEditingNoteId(null)}
+                        onClick={() => setEditingNoteKey(null)}
                         className="p-1 bg-[#2A211B] text-[#FAF8F5] rounded-md"
                       >
                         <Check className="w-3 h-3" />
@@ -649,7 +697,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
                     <div className="flex items-center gap-1 bg-[#F2ECE2] px-1.5 py-0.5 rounded-lg border border-[#E5DDD0]">
                       <button
                         type="button"
-                        onClick={() => updateQuantity(item.productId, -1)}
+                        onClick={() => updateQuantity(item.productId, item.variantLabel, -1)}
                         className="w-5 h-5 flex items-center justify-center text-[#5E5248] hover:text-[#1F1A17] rounded active:scale-90"
                       >
                         <Minus className="w-3 h-3" />
@@ -659,7 +707,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
                       </span>
                       <button
                         type="button"
-                        onClick={() => updateQuantity(item.productId, 1)}
+                        onClick={() => updateQuantity(item.productId, item.variantLabel, 1)}
                         className="w-5 h-5 flex items-center justify-center text-[#5E5248] hover:text-[#1F1A17] rounded active:scale-90"
                       >
                         <Plus className="w-3 h-3" />
@@ -735,6 +783,82 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
           </div>
         </div>
       </aside>
+
+      {/* Variant Picker Modal (Hot / Dingin) */}
+      {variantPickerProduct && variantPickerProduct.variants && (
+        <div
+          onClick={() => setVariantPickerProduct(null)}
+          className="fixed inset-0 z-50 bg-[#26201C]/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#FAF8F5] border border-[#E5DDD0] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-pop-in"
+          >
+            <div className="px-5 py-4 border-b border-[#E5DDD0] flex items-center justify-between bg-[#F2ECE2]/70">
+              <div className="min-w-0 pr-3">
+                <h3 className="text-sm font-extrabold text-[#1F1A17] truncate">
+                  {variantPickerProduct.name}
+                </h3>
+                <p className="text-[11px] text-[#7D6F63] mt-0.5">
+                  Pilih versi penyajian untuk masuk ke pesanan
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVariantPickerProduct(null)}
+                className="p-1.5 rounded-lg text-[#7D6F63] hover:text-[#1F1A17] hover:bg-[#E5DDD0] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-2.5">
+              {variantPickerProduct.variants.map((variant) => {
+                const isHot = variant.label.toLowerCase().includes('hot');
+                return (
+                  <button
+                    key={variant.label}
+                    type="button"
+                    onClick={() => {
+                      addToCart(variantPickerProduct, variant);
+                      setVariantPickerProduct(null);
+                    }}
+                    className={`w-full p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all active:scale-[0.98] ${
+                      isHot
+                        ? 'bg-[#F6EFE6] hover:bg-[#EFE2D2] border-[#DFCBB3] text-[#1F1A17]'
+                        : 'bg-[#EEF4F8] hover:bg-[#DFECF4] border-[#C3D8E6] text-[#1F1A17]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          isHot
+                            ? 'bg-[#EAD6BE] text-[#7A4B1A]'
+                            : 'bg-[#D6E6F2] text-[#255478]'
+                        }`}
+                      >
+                        {isHot ? <Flame className="w-5 h-5" /> : <Snowflake className="w-5 h-5" />}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-sm font-extrabold text-[#1F1A17]">
+                          {isHot ? 'Hot (Panas)' : `${variant.label} (Ice)`}
+                        </div>
+                        <div className="text-[11px] text-[#7D6F63]">
+                          Ketuk untuk tambah 1 {variantPickerProduct.unit || 'cup'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-sm font-extrabold text-[#1F1A17] tabular-nums">
+                      {PrinterService.formatRupiah(variant.price)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       <PaymentModal

@@ -1,10 +1,16 @@
+export interface ProductVariant {
+  label: string; // mis. 'Hot' | 'Dingin'
+  price: number;
+}
+
 export interface Product {
   id?: number;
   barcode: string;
   name: string;
   category: string;
   buyPrice: number; // Harga modal/beli
-  price: number;    // Harga jual
+  price: number;    // Harga jual standar (atau harga terendah jika memakai varian)
+  variants?: ProductVariant[]; // Opsional: mis. versi Hot & Dingin dengan harga berbeda
   stock: number;
   minStock: number;
   image?: string;   // base64 atau url
@@ -16,6 +22,7 @@ export interface CartItem {
   productId: number;
   barcode: string;
   name: string;
+  variantLabel?: string; // mis. 'Hot' | 'Dingin'
   buyPrice: number;
   price: number;
   quantity: number;
