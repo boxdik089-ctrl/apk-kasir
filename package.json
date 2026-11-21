@@ -1,0 +1,43 @@
+{
+  "name": "aplikasi-kasir",
+  "private": true,
+  "version": "1.0.0",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "sync": "node server/syncServer.cjs",
+    "dev": "concurrently -k \"node server/syncServer.cjs\" \"vite\"",
+    "web": "concurrently -k \"node server/syncServer.cjs\" \"vite --open --host\"",
+    "web:build": "tsc -b && vite build",
+    "web:preview": "vite preview --open --host",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"node server/syncServer.cjs\" \"vite\" \"cross-env NODE_ENV=development node electron/run.cjs\"",
+    "start": "node electron/run.cjs",
+    "app": "npm run build && node electron/run.cjs"
+  },
+  "dependencies": {
+    "canvas-confetti": "^1.9.4",
+    "cloudflared": "^0.7.3",
+    "dexie": "^4.4.7",
+    "lucide-react": "^1.69.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.4",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^45.2.3",
+    "oxlint": "^1.90.0",
+    "tailwindcss": "^4.3.4",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  }
+}
