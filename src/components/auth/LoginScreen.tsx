@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, Shield, User, Lock, Delete, AlertCircle, LogIn } from 'lucide-react';
-import type { ReceiptSettings, UserRole } from '../../types';
+import { Coffee, Shield, User, Lock, Delete, AlertCircle, LogIn, Sun, Sunset } from 'lucide-react';
+import type { ReceiptSettings, UserRole, CashierShift } from '../../types';
 import { DEFAULT_OWNER_PIN_HASH, DEFAULT_CASHIER_PIN_HASH } from '../../utils/hash';
 import { SyncService } from '../../services/syncService';
 
@@ -8,7 +8,7 @@ interface LoginScreenProps {
   settings: ReceiptSettings;
   isSyncOnline: boolean;
   defaultMode?: UserRole;
-  onLoginSuccess: (role: UserRole, userName: string, ownerPin?: string) => void;
+  onLoginSuccess: (role: UserRole, userName: string, ownerPin?: string, shift?: CashierShift) => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
@@ -17,8 +17,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   defaultMode = 'CASHIER',
   onLoginSuccess
 }) => {
+  const defaultShiftByHour: CashierShift = new Date().getHours() < 14 ? 'Shift Pagi' : 'Shift Siang';
   const [role, setRole] = useState<UserRole>(defaultMode);
   const [cashierName, setCashierName] = useState('');
+  const [shift, setShift] = useState<CashierShift>(defaultShiftByHour);
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,13 +71,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       setIsSubmitting(true);
       try {
-        const res = await SyncService.verifyCashierPin(pin, cleanName);
+        const res = await SyncService.verifyCashierPin(pin, cleanName, shift);
         if (!res.ok) {
           setError(res.error || 'PIN Kasir salah.');
           setPin('');
           return;
         }
-        onLoginSuccess('CASHIER', cleanName);
+        onLoginSuccess('CASHIER', cleanName, undefined, shift);
       } finally {
         setIsSubmitting(false);
       }
@@ -180,21 +182,53 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           )}
 
           {role === 'CASHIER' && (
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-[#3D332B]">
-                Nama Kasir
-              </label>
-              <input
-                type="text"
-                autoFocus
-                value={cashierName}
-                onChange={(e) => {
-                  setCashierName(e.target.value);
-                  setError(null);
-                }}
-                placeholder="Ketik nama kasir..."
-                className="w-full px-3.5 py-2.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-sm font-semibold text-[#1F1A17] placeholder-[#9C8E80] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2A211B]"
-              />
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#3D332B]">
+                  Nama Kasir
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={cashierName}
+                  onChange={(e) => {
+                    setCashierName(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="Ketik nama kasir..."
+                  className="w-full px-3.5 py-2.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-sm font-semibold text-[#1F1A17] placeholder-[#9C8E80] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2A211B]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#3D332B]">
+                  Pilih Shift Kasir
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { id: 'Shift Pagi' as const, label: 'Shift Pagi', icon: Sun },
+                    { id: 'Shift Siang' as const, label: 'Shift Siang', icon: Sunset }
+                  ]).map((s) => {
+                    const Icon = s.icon;
+                    const active = shift === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setShift(s.id)}
+                        className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
+                          active
+                            ? 'bg-[#2A211B] text-[#FAF8F5] border-[#2A211B]'
+                            : 'bg-[#F2ECE2] text-[#5E5248] border-[#E2D9CC] hover:bg-[#EAE2D6]'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span>{s.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 

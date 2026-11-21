@@ -15,7 +15,7 @@ import {
   Minimize2,
   LogOut
 } from 'lucide-react';
-import type { ReceiptSettings, UserRole } from '../types';
+import type { ReceiptSettings, UserRole, CashierShift } from '../types';
 
 export type AppTab = 'pos' | 'products' | 'receipt' | 'printer' | 'reports' | 'owner';
 
@@ -25,6 +25,7 @@ interface NavbarProps {
   settings: ReceiptSettings;
   userRole: UserRole;
   activeUserName: string;
+  activeShift: CashierShift;
   isSyncOnline: boolean;
   onRequestOwnerLogin: () => void;
   onLockToCashier: () => void;
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   settings,
   userRole,
   activeUserName,
+  activeShift,
   isSyncOnline,
   onRequestOwnerLogin,
   onLockToCashier,
@@ -156,7 +158,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Masuk dengan PIN khusus Owner"
             >
               <Lock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{activeUserName} • </span>
+              <span className="hidden sm:inline">{activeUserName} ({activeShift === 'Shift Pagi' ? 'Pagi' : 'Siang'}) • </span>
               <span>Owner</span>
             </button>
           )}

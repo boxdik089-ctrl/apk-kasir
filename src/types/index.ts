@@ -27,6 +27,7 @@ export interface CartItem {
 export type PaymentMethod = 'CASH' | 'QRIS' | 'TRANSFER' | 'DEBIT' | 'KASBON';
 
 export type UserRole = 'CASHIER' | 'OWNER';
+export type CashierShift = 'Shift Pagi' | 'Shift Siang';
 
 export type AuditAction =
   | 'CASHIER_LOGIN'
@@ -55,6 +56,7 @@ export interface Transaction {
   invoiceNumber: string;
   timestamp: string;
   cashierName: string;
+  shift?: CashierShift;
   customerName?: string;
   customerPhone?: string;
   items: CartItem[];

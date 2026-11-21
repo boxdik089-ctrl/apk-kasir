@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
-import type { Product, ReceiptSettings, UserRole } from './types';
+import type { Product, ReceiptSettings, UserRole, CashierShift } from './types';
 import { db, initDatabase, defaultSettings } from './db/db';
 import { Navbar, type AppTab } from './components/Navbar';
 import { CashierScreen } from './components/pos/CashierScreen';
@@ -24,6 +24,7 @@ export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('CASHIER');
   const [activeUserName, setActiveUserName] = useState<string>('Kasir');
+  const [activeShift, setActiveShift] = useState<CashierShift>('Shift Pagi');
   const [ownerPin, setOwnerPin] = useState<string>('');
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pendingTab, setPendingTab] = useState<AppTab | null>(null);
@@ -99,9 +100,12 @@ export function App() {
     }
   };
 
-  const handleLoginSuccess = (role: UserRole, userName: string, pin?: string) => {
+  const handleLoginSuccess = (role: UserRole, userName: string, pin?: string, shift?: CashierShift) => {
     setUserRole(role);
     setActiveUserName(userName);
+    if (shift) {
+      setActiveShift(shift);
+    }
     if (role === 'OWNER' && pin) {
       setOwnerPin(pin);
       setCurrentTab('owner');
@@ -155,6 +159,7 @@ export function App() {
         settings={settings}
         userRole={userRole}
         activeUserName={activeUserName}
+        activeShift={activeShift}
         isSyncOnline={isSyncOnline}
         onRequestOwnerLogin={() => {
           setPendingTab('owner');
@@ -196,6 +201,7 @@ export function App() {
                 userRole={userRole}
                 ownerPin={ownerPin}
                 initialCashierName={activeUserName}
+                activeShift={activeShift}
                 onRefreshProducts={loadLocalData}
                 onNavigateToSettings={() => handleSelectTab('printer')}
               />

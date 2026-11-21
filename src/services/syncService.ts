@@ -1,5 +1,5 @@
 import { db, defaultSettings, defaultSecuritySettings } from '../db/db';
-import type { Product, Transaction, HeldCart, ReceiptSettings, AuditLog, AuditAction, UserRole } from '../types';
+import type { Product, Transaction, HeldCart, ReceiptSettings, AuditLog, AuditAction, UserRole, CashierShift } from '../types';
 import { sha256 } from '../utils/hash';
 
 export interface SyncHealthInfo {
@@ -222,14 +222,14 @@ class SyncServiceClass {
     }
   }
 
-  public async verifyCashierPin(pin: string, cashierName: string): Promise<{ ok: boolean; error?: string }> {
+  public async verifyCashierPin(pin: string, cashierName: string, shift: CashierShift = 'Shift Pagi'): Promise<{ ok: boolean; error?: string }> {
     const deviceLabel = /Mobi|Android|iPhone/i.test(navigator.userAgent) ? 'HP / Tablet' : 'Komputer Kasir';
     const cleanName = cashierName.trim() || 'Kasir';
     try {
       const res = await fetch(this.api('/api/cashier/verify'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin, cashierName: cleanName, device: deviceLabel })
+        body: JSON.stringify({ pin, cashierName: cleanName, shift, device: deviceLabel })
       });
       const data = await res.json();
       if (data.ok) {
@@ -240,17 +240,17 @@ class SyncServiceClass {
     } catch {
       const localSettings = await db.settings.get(1);
       if (localSettings?.security?.requireCashierPin === false) {
-        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Shift dimulai offline (${deviceLabel})`);
+        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cleanName} masuk ${shift} offline (${deviceLabel})`);
         this.notifyListeners();
         return { ok: true };
       }
       const expectedHash = localSettings?.security?.cashierPinHash || defaultSecuritySettings.cashierPinHash || sha256('1234');
       if (sha256(pin) === expectedHash) {
-        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Shift dimulai offline (${deviceLabel})`);
+        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cleanName} masuk ${shift} offline (${deviceLabel})`);
         this.notifyListeners();
         return { ok: true };
       }
-      await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan PIN Kasir gagal (${deviceLabel})`);
+      await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan PIN Kasir gagal (${shift}, ${deviceLabel})`);
       this.notifyListeners();
       return { ok: false, error: 'PIN Kasir salah.' };
     }

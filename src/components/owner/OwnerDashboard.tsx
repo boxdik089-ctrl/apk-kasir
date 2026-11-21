@@ -111,7 +111,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const todayVoid = todayTx.filter((t) => t.status === 'CANCELLED');
   const todayRevenue = todayCompleted.reduce((sum, t) => sum + t.total, 0);
   const todayVoidTotal = todayVoid.reduce((sum, t) => sum + t.total, 0);
-  const failedPinCount = auditLogs.filter((l) => l.action === 'OWNER_LOGIN_FAILED').length;
+  const failedPinCount = auditLogs.filter((l) => l.action === 'OWNER_LOGIN_FAILED' || l.action === 'CASHIER_LOGIN_FAILED').length;
+
+  const getTxShift = (tx: Transaction) =>
+    tx.shift || (new Date(tx.timestamp).getHours() < 14 ? 'Shift Pagi' : 'Shift Siang');
+  const shiftPagiTx = todayCompleted.filter((t) => getTxShift(t) === 'Shift Pagi');
+  const shiftSiangTx = todayCompleted.filter((t) => getTxShift(t) === 'Shift Siang');
+  const shiftPagiRevenue = shiftPagiTx.reduce((sum, t) => sum + t.total, 0);
+  const shiftSiangRevenue = shiftSiangTx.reduce((sum, t) => sum + t.total, 0);
 
   const handleToggleSecurity = async (field: keyof SecuritySettings, value: boolean) => {
     const updatedSettings: ReceiptSettings = {
@@ -313,6 +320,33 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             >
               {security.terminalLocked ? 'Buka Kunci' : 'Kunci Kasir'}
             </button>
+          </div>
+        </div>
+
+        {/* Shift Pagi vs Shift Siang Breakdown */}
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          <div className="p-3.5 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl flex items-center justify-between gap-2">
+            <div>
+              <div className="text-[11px] font-bold text-[#874C23]">Shift Pagi</div>
+              <div className="text-sm sm:text-lg font-extrabold text-[#1F1A17] tabular-nums mt-0.5">
+                {PrinterService.formatRupiah(shiftPagiRevenue)}
+              </div>
+            </div>
+            <span className="px-2 py-1 rounded-md bg-[#EFE9DF] text-[#5E5248] text-[11px] font-semibold tabular-nums">
+              {shiftPagiTx.length} struk
+            </span>
+          </div>
+
+          <div className="p-3.5 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl flex items-center justify-between gap-2">
+            <div>
+              <div className="text-[11px] font-bold text-[#285A3B]">Shift Siang</div>
+              <div className="text-sm sm:text-lg font-extrabold text-[#1F1A17] tabular-nums mt-0.5">
+                {PrinterService.formatRupiah(shiftSiangRevenue)}
+              </div>
+            </div>
+            <span className="px-2 py-1 rounded-md bg-[#EAF3EC] text-[#285A3B] text-[11px] font-semibold tabular-nums">
+              {shiftSiangTx.length} struk
+            </span>
           </div>
         </div>
 

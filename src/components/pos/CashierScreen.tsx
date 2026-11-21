@@ -11,7 +11,7 @@ import {
   MessageSquarePlus,
   Check
 } from 'lucide-react';
-import type { Product, CartItem, ReceiptSettings, HeldCart, UserRole } from '../../types';
+import type { Product, CartItem, ReceiptSettings, HeldCart, UserRole, CashierShift } from '../../types';
 import { PrinterService } from '../../services/printerService';
 import { SyncService } from '../../services/syncService';
 import { PaymentModal } from './PaymentModal';
@@ -26,6 +26,7 @@ interface CashierScreenProps {
   userRole: UserRole;
   ownerPin: string;
   initialCashierName?: string;
+  activeShift?: CashierShift;
   onRefreshProducts: () => void;
   onNavigateToSettings: () => void;
 }
@@ -36,6 +37,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   userRole,
   ownerPin,
   initialCashierName = 'Kasir',
+  activeShift = 'Shift Pagi',
   onRefreshProducts
 }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -486,7 +488,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const name = prompt('Nama Barista / Kasir:', cashierName);
+                  const name = prompt('Nama Kasir:', cashierName);
                   if (name?.trim()) setCashierName(name.trim());
                 }}
                 className="hover:text-[#1F1A17] underline underline-offset-2 font-medium"
@@ -494,6 +496,9 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
               >
                 {cashierName}
               </button>
+              <span className="px-1.5 py-0.5 rounded bg-[#EFE9DF] text-[#5E5248] text-[10px] font-semibold">
+                {activeShift}
+              </span>
             </div>
           </div>
 
@@ -741,6 +746,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
         tax={tax}
         total={grandTotal}
         cashierName={cashierName}
+        activeShift={activeShift}
         initialCustomerName={formattedCustomerRef}
         settings={settings}
         onTransactionComplete={() => {

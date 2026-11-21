@@ -80,7 +80,10 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
         {settings.showCashier && transaction.cashierName && (
           <div className="flex justify-between">
             <span className="text-gray-600">Kasir</span>
-            <span>{transaction.cashierName}</span>
+            <span>
+              {transaction.cashierName}
+              {transaction.shift ? ` (${transaction.shift})` : ''}
+            </span>
           </div>
         )}
         {settings.showCustomer && transaction.customerName && (

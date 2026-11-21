@@ -8,7 +8,7 @@ import {
   Search, 
   Award 
 } from 'lucide-react';
-import type { Transaction, ReceiptSettings, UserRole } from '../../types';
+import type { Transaction, ReceiptSettings, UserRole, CashierShift } from '../../types';
 import { ReceiptView } from '../receipt/ReceiptView';
 import { OwnerPinModal } from '../auth/OwnerPinModal';
 import { PrinterService } from '../../services/printerService';
@@ -24,6 +24,7 @@ interface ReportsScreenProps {
 export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [timeFilter, setTimeFilter] = useState<'today' | '7days' | 'month' | 'all'>('today');
+  const [shiftFilter, setShiftFilter] = useState<'ALL' | CashierShift>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [voidTargetTx, setVoidTargetTx] = useState<Transaction | null>(null);
@@ -74,32 +75,45 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
     return true;
   });
 
+  // Filter by shift (supports inferring legacy tx shift by hour if shift field absent)
+  const getTxShift = (tx: Transaction): CashierShift => {
+    if (tx.shift) return tx.shift;
+    return new Date(tx.timestamp).getHours() < 14 ? 'Shift Pagi' : 'Shift Siang';
+  };
+
+  const filteredByShift = filteredByDate.filter((tx) => {
+    if (shiftFilter === 'ALL') return true;
+    return getTxShift(tx) === shiftFilter;
+  });
+
   // Filter by search query (invoice number or customer name)
-  const displayTransactions = filteredByDate.filter((tx) => {
+  const displayTransactions = filteredByShift.filter((tx) => {
     const q = searchQuery.toLowerCase();
     const matchesInv = tx.invoiceNumber.toLowerCase().includes(q);
     const matchesCustomer = tx.customerName?.toLowerCase().includes(q) ?? false;
-    return matchesInv || matchesCustomer;
+    const matchesCashier = tx.cashierName.toLowerCase().includes(q);
+    return matchesInv || matchesCustomer || matchesCashier;
   });
 
-  // KPI Calculations
-  const totalRevenue = filteredByDate.reduce((acc, tx) => acc + (tx.status === 'COMPLETED' ? tx.total : 0), 0);
-  
+  // KPI Calculations (scoped to selected time + shift)
+  const completedInScope = filteredByShift.filter((tx) => tx.status === 'COMPLETED');
+  const totalRevenue = completedInScope.reduce((acc, tx) => acc + tx.total, 0);
+  const cashTotal = completedInScope.filter((t) => t.paymentMethod === 'CASH').reduce((acc, t) => acc + t.total, 0);
+  const nonCashTotal = totalRevenue - cashTotal;
+
   // Calculate Profit: Revenue - Cost
   let totalCost = 0;
-  for (const tx of filteredByDate) {
-    if (tx.status === 'COMPLETED') {
-      for (const item of tx.items) {
-        totalCost += (item.buyPrice || 0) * item.quantity;
-      }
+  for (const tx of completedInScope) {
+    for (const item of tx.items) {
+      totalCost += (item.buyPrice || 0) * item.quantity;
     }
   }
   const grossProfit = Math.max(0, totalRevenue - totalCost);
-  const avgOrderValue = filteredByDate.length > 0 ? Math.round(totalRevenue / filteredByDate.length) : 0;
+  const avgOrderValue = completedInScope.length > 0 ? Math.round(totalRevenue / completedInScope.length) : 0;
 
   // Best Selling Items calculation
   const productSalesMap: { [name: string]: { qty: number; revenue: number } } = {};
-  for (const tx of filteredByDate) {
+  for (const tx of completedInScope) {
     if (tx.status === 'COMPLETED') {
       for (const item of tx.items) {
         if (!productSalesMap[item.name]) {
@@ -149,10 +163,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
 
   // Export to CSV
   const handleExportCSV = () => {
-    const headers = ['No Struk', 'Tanggal Waktu', 'Kasir', 'Pelanggan', 'Metode Bayar', 'Subtotal', 'Diskon', 'Total', 'Status'];
-    const rows = filteredByDate.map((tx) => [
+    const headers = ['No Struk', 'Tanggal Waktu', 'Shift', 'Kasir', 'Pelanggan', 'Metode Bayar', 'Subtotal', 'Diskon', 'Total', 'Status'];
+    const rows = filteredByShift.map((tx) => [
       `"${tx.invoiceNumber}"`,
       `"${tx.timestamp}"`,
+      `"${getTxShift(tx)}"`,
       `"${tx.cashierName}"`,
       `"${tx.customerName || '-'}"`,
       tx.paymentMethod,
@@ -196,37 +211,60 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
         </button>
       </div>
 
-      {/* Time Range Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 my-4 sm:my-5">
-        <div className="flex items-center gap-1 bg-[#FAF8F5] p-1 rounded-lg border border-[#E5DDD0] overflow-x-auto no-scrollbar">
-          {[
-            { id: 'today', label: 'Hari Ini' },
-            { id: '7days', label: '7 Hari' },
-            { id: 'month', label: 'Bulan Ini' },
-            { id: 'all', label: 'Semua' }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setTimeFilter(tab.id as any)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-colors ${
-                timeFilter === tab.id
-                  ? 'bg-[#2A211B] text-[#FAF8F5]'
-                  : 'text-[#6D6055] hover:text-[#1F1A17] hover:bg-[#EFE9DF]'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      {/* Time & Shift Filter Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 my-4 sm:my-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 bg-[#FAF8F5] p-1 rounded-lg border border-[#E5DDD0] overflow-x-auto no-scrollbar">
+            {[
+              { id: 'today', label: 'Hari Ini' },
+              { id: '7days', label: '7 Hari' },
+              { id: 'month', label: 'Bulan Ini' },
+              { id: 'all', label: 'Semua' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setTimeFilter(tab.id as any)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-colors ${
+                  timeFilter === tab.id
+                    ? 'bg-[#2A211B] text-[#FAF8F5]'
+                    : 'text-[#6D6055] hover:text-[#1F1A17] hover:bg-[#EFE9DF]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1 bg-[#FAF8F5] p-1 rounded-lg border border-[#E5DDD0]">
+            {([
+              { id: 'ALL', label: 'Semua Shift' },
+              { id: 'Shift Pagi', label: 'Shift Pagi' },
+              { id: 'Shift Siang', label: 'Shift Siang' }
+            ] as const).map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setShiftFilter(s.id)}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-colors ${
+                  shiftFilter === s.id
+                    ? 'bg-[#285A3B] text-[#FAF8F5]'
+                    : 'text-[#6D6055] hover:text-[#1F1A17] hover:bg-[#EFE9DF]'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full lg:w-64">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#9C8E80]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari No. Struk atau meja..."
+            placeholder="Cari struk, kasir, atau meja..."
             className="w-full pl-8 pr-3 py-2 sm:py-1.5 bg-[#FAF8F5] border border-[#E5DDD0] rounded-lg text-xs text-[#1F1A17] placeholder-[#9C8E80] focus:outline-none focus:border-[#2A211B] transition-colors"
           />
         </div>
@@ -238,9 +276,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
         return (
           <div className={`grid grid-cols-2 ${showProfit ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-2.5 sm:gap-3 mb-4 sm:mb-5`}>
             <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
-              <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Total Omzet</span>
+              <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">
+                Omzet {shiftFilter !== 'ALL' ? `(${shiftFilter})` : ''}
+              </span>
               <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums tracking-tight truncate">
                 {PrinterService.formatRupiah(totalRevenue)}
+              </div>
+              <div className="text-[10px] sm:text-[11px] text-[#7D6F63] mt-1 tabular-nums">
+                Tunai: {PrinterService.formatRupiah(cashTotal)} • Non-Tunai: {PrinterService.formatRupiah(nonCashTotal)}
               </div>
             </div>
 
@@ -256,7 +299,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
             <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
               <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Transaksi</span>
               <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums tracking-tight">
-                {filteredByDate.length} <span className="text-xs font-medium text-[#8C7E71]">struk</span>
+                {filteredByShift.length} <span className="text-xs font-medium text-[#8C7E71]">struk</span>
               </div>
             </div>
 
@@ -325,7 +368,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
                       </span>
                     </div>
                     <div className="text-[11px] text-[#7D6F63] mt-0.5 tabular-nums">
-                      {PrinterService.formatDate(tx.timestamp)} • {tx.cashierName}
+                      {PrinterService.formatDate(tx.timestamp)} • {tx.cashierName} ({getTxShift(tx)})
                     </div>
                   </div>
                   <div className="text-right">
@@ -399,7 +442,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
                       {PrinterService.formatDate(tx.timestamp)}
                     </td>
                     <td className="py-3 px-4 font-medium text-[#1F1A17]">
-                      {tx.cashierName}
+                      <div>{tx.cashierName}</div>
+                      <div className="text-[10px] text-[#7D6F63]">{getTxShift(tx)}</div>
                     </td>
                     <td className="py-3 px-4 text-[#5E5248]">
                       {tx.customerName || '-'}

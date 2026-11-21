@@ -10,7 +10,7 @@ import {
   BookOpen, 
   ArrowRight
 } from 'lucide-react';
-import type { CartItem, PaymentMethod, Transaction, ReceiptSettings } from '../../types';
+import type { CartItem, PaymentMethod, Transaction, ReceiptSettings, CashierShift } from '../../types';
 import { PrinterService } from '../../services/printerService';
 import { SyncService } from '../../services/syncService';
 import { ReceiptView } from '../receipt/ReceiptView';
@@ -24,6 +24,7 @@ interface PaymentModalProps {
   tax: number;
   total: number;
   cashierName: string;
+  activeShift?: CashierShift;
   initialCustomerName?: string;
   settings: ReceiptSettings;
   onTransactionComplete: (transaction: Transaction) => void;
@@ -38,6 +39,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   tax,
   total,
   cashierName,
+  activeShift = 'Shift Pagi',
   initialCustomerName = '',
   settings,
   onTransactionComplete
@@ -87,6 +89,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       invoiceNumber,
       timestamp: new Date().toISOString(),
       cashierName: cashierName || 'Kasir',
+      shift: activeShift,
       customerName: customerName.trim() || undefined,
       items: [...items],
       subtotal,

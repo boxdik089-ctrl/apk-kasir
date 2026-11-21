@@ -412,13 +412,14 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/cashier/verify') {
       const body = await readJsonBody(req);
       const cashierName = String(body.cashierName || '').trim() || 'Kasir';
+      const shift = body.shift === 'Shift Siang' ? 'Shift Siang' : 'Shift Pagi';
       const ok = verifyCashierPin(body.pin);
       if (ok) {
-        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cashierName} masuk shift dari ${body.device || 'perangkat'}`);
+        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cashierName} masuk ${shift} dari ${body.device || 'perangkat'}`);
         persistStore();
-        return sendJson(res, 200, { ok: true, cashierName });
+        return sendJson(res, 200, { ok: true, cashierName, shift });
       } else {
-        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan PIN Kasir gagal atas nama ${cashierName} (${body.device || 'perangkat'})`);
+        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan PIN Kasir gagal atas nama ${cashierName} (${shift}, ${body.device || 'perangkat'})`);
         persistStore();
         return sendJson(res, 401, { ok: false, error: 'PIN Kasir salah.' });
       }
