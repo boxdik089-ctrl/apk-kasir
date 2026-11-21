@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   Copy,
   Check,
-  KeyRound,
   RefreshCw,
   Globe,
   MonitorSmartphone
@@ -30,7 +29,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   settings,
   ownerPin,
   onUpdateSettings,
-  onUpdateOwnerPin,
+  onUpdateOwnerPin: _onUpdateOwnerPin,
   onLockBackToCashier
 }) => {
   const [health, setHealth] = useState<SyncHealthInfo | null>(null);
@@ -42,13 +41,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [tunnel, setTunnel] = useState<RemoteTunnelStatus>({ status: 'idle', url: null, ownerUrl: null });
   const [isTogglingTunnel, setIsTogglingTunnel] = useState(false);
-
-  // PIN change form
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
-  const [pinMsg, setPinMsg] = useState<string | null>(null);
-  const [newCashierPin, setNewCashierPin] = useState('');
-  const [cashierPinMsg, setCashierPinMsg] = useState<string | null>(null);
 
   const security: SecuritySettings = {
     ...defaultSecuritySettings,
@@ -111,7 +103,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const todayVoid = todayTx.filter((t) => t.status === 'CANCELLED');
   const todayRevenue = todayCompleted.reduce((sum, t) => sum + t.total, 0);
   const todayVoidTotal = todayVoid.reduce((sum, t) => sum + t.total, 0);
-  const failedPinCount = auditLogs.filter((l) => l.action === 'OWNER_LOGIN_FAILED' || l.action === 'CASHIER_LOGIN_FAILED').length;
 
   const getTxShift = (tx: Transaction) =>
     tx.shift || (new Date(tx.timestamp).getHours() < 14 ? 'Shift Pagi' : 'Shift Siang');
@@ -131,32 +122,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     const res = await SyncService.updateSettings(updatedSettings, ownerPin);
     if (res.ok) {
       onUpdateSettings(updatedSettings);
-      setStatusMessage('Pengaturan keamanan diperbarui dan disinkronkan ke kasir.');
+      setStatusMessage('Pengaturan diperbarui dan disinkronkan ke kasir.');
       setTimeout(() => setStatusMessage(null), 3500);
     } else {
-      alert(res.error || 'Gagal memperbarui pengaturan keamanan.');
-    }
-  };
-
-  const handleChangePin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPin.length < 4 || newPin.length > 8) {
-      setPinMsg('PIN baru harus 4 hingga 8 digit angka.');
-      return;
-    }
-    if (newPin !== confirmPin) {
-      setPinMsg('Konfirmasi PIN tidak cocok.');
-      return;
-    }
-    const res = await SyncService.updateSettings(settings, ownerPin, newPin);
-    if (res.ok) {
-      onUpdateOwnerPin(newPin);
-      setNewPin('');
-      setConfirmPin('');
-      setPinMsg('PIN Owner berhasil diganti.');
-      setTimeout(() => setPinMsg(null), 4000);
-    } else {
-      setPinMsg(res.error || 'Gagal mengganti PIN.');
+      alert(res.error || 'Gagal memperbarui pengaturan.');
     }
   };
 
@@ -165,22 +134,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       setCopiedUrl(text);
       setTimeout(() => setCopiedUrl(null), 2000);
     });
-  };
-
-  const handleChangeCashierPin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newCashierPin.length < 4 || newCashierPin.length > 8) {
-      setCashierPinMsg('PIN Kasir harus 4 hingga 8 digit angka.');
-      return;
-    }
-    const res = await SyncService.updateSettings(settings, ownerPin, undefined, newCashierPin);
-    if (res.ok) {
-      setNewCashierPin('');
-      setCashierPinMsg('PIN Kasir berhasil diperbarui.');
-      setTimeout(() => setCashierPinMsg(null), 4000);
-    } else {
-      setCashierPinMsg(res.error || 'Gagal mengganti PIN Kasir.');
-    }
   };
 
   const alertActions = new Set(['VOID_TRANSACTION', 'DELETE_HELD_CART', 'OWNER_LOGIN_FAILED', 'CASHIER_LOGIN_FAILED', 'DB_RESTORED']);
@@ -275,16 +228,12 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           </div>
 
           <div className="p-3.5 sm:p-4 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl">
-            <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">PIN Gagal</span>
-            <div
-              className={`text-base sm:text-2xl font-extrabold mt-1 tabular-nums ${
-                failedPinCount > 0 ? 'text-[#925C25]' : 'text-[#1F1A17]'
-              }`}
-            >
-              {failedPinCount}
+            <span className="text-[11px] sm:text-xs font-medium text-[#7D6F63]">Catatan Audit</span>
+            <div className="text-base sm:text-2xl font-extrabold text-[#1F1A17] mt-1 tabular-nums">
+              {auditLogs.length}
             </div>
             <div className="text-[11px] text-[#7D6F63] mt-0.5">
-              Tercatat di Audit
+              Aktivitas tercatat
             </div>
           </div>
 
@@ -350,19 +299,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           </div>
         </div>
 
-        {/* Mobile Section Switcher (Hidden on Desktop) */}
-        <div className="grid grid-cols-3 gap-1 p-1 bg-[#EAE3D7] rounded-xl lg:hidden">
+            {/* Mobile Section Switcher (Hidden on Desktop) */}
+        <div className="grid grid-cols-2 gap-1 p-1 bg-[#EAE3D7] rounded-xl lg:hidden">
           {[
-            { id: 'KONTROL' as const, label: 'Kontrol Kasir' },
-            { id: 'AUDIT' as const, label: `Audit (${auditLogs.length})` },
-            { id: 'REMOTE' as const, label: 'Remote & PIN' }
+            { id: 'REMOTE' as const, label: 'Remote HP' },
+            { id: 'AUDIT' as const, label: `Audit (${auditLogs.length})` }
           ].map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setMobileSection(tab.id)}
               className={`py-2 px-2 rounded-lg text-xs font-bold transition-colors ${
-                mobileSection === tab.id
+                mobileSection === tab.id || (mobileSection === 'KONTROL' && tab.id === 'REMOTE')
                   ? 'bg-[#FAF8F5] text-[#1F1A17] shadow-2xs'
                   : 'text-[#6D6055]'
               }`}
@@ -373,57 +321,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Left: Security Controls + Remote Access */}
+          {/* Left: Remote Access & Mode Info */}
           <div className="lg:col-span-5 space-y-4">
-            {/* Security Permissions */}
-            <div className={`${mobileSection === 'KONTROL' ? 'block' : 'hidden'} lg:block bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl p-4 sm:p-5 space-y-3`}>
+            <div className={`${mobileSection === 'AUDIT' ? 'hidden' : 'block'} lg:block bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl p-4 sm:p-5 space-y-2`}>
               <h2 className="text-xs font-bold text-[#1F1A17]">
-                Batasan Hak Akses Kasir (Anti-Manipulasi)
+                Mode Akses Praktis (Tanpa PIN)
               </h2>
-
-              <div className="p-3 bg-[#F2ECE2]/70 rounded-lg border border-[#E5DDD0] text-xs">
-                <div className="font-bold text-[#1F1A17]">Pembatalan Struk (Void) Terkunci</div>
-                <div className="text-[11px] text-[#7D6F63] mt-0.5">
-                  Permanen aktif: Kasir tidak bisa menghapus atau membatalkan transaksi tanpa PIN Owner & alasan tertulis.
-                </div>
-              </div>
-
-              {[
-                {
-                  key: 'cashierCanDeleteHeldCart' as const,
-                  title: 'Izinkan Kasir Hapus Open Bill tanpa PIN',
-                  desc: 'Sebaiknya MATI agar kasir tidak menghapus pesanan tertahan setelah terima uang.'
-                },
-                {
-                  key: 'cashierCanAddMenu' as const,
-                  title: 'Izinkan Kasir Tambah Menu Baru',
-                  desc: 'Kasir dapat menambah menu baru dari layar POS.'
-                },
-                {
-                  key: 'cashierCanEditMenu' as const,
-                  title: 'Izinkan Kasir Edit / Hapus Harga Menu',
-                  desc: 'Sebaiknya MATI agar kasir tidak mengubah harga jual seenaknya.'
-                }
-              ].map((item) => {
-                const checked = !!security[item.key];
-                return (
-                  <label
-                    key={item.key}
-                    className="flex items-start gap-3 p-3 bg-[#F2ECE2]/60 rounded-lg border border-[#E5DDD0] cursor-pointer hover:bg-[#EFE9DF] transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => handleToggleSecurity(item.key, e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded text-[#2A211B] focus:ring-[#2A211B] border-[#D5C9B8]"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-[#1F1A17]">{item.title}</div>
-                      <div className="text-[11px] text-[#7D6F63] mt-0.5">{item.desc}</div>
-                    </div>
-                  </label>
-                );
-              })}
+              <p className="text-[11px] text-[#7D6F63] leading-relaxed">
+                Penambahan menu, edit harga Hot/Dingin, maupun pindah tab berjalan langsung tanpa PIN agar tidak menghambat pelayanan. Setiap aktivitas tetap tercatat otomatis di Audit Log.
+              </p>
             </div>
 
             {/* Remote Access Card */}
@@ -532,87 +438,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 )}
               </div>
             </div>
-
-            {/* Change Owner PIN */}
-            <form
-              onSubmit={handleChangePin}
-              className={`${mobileSection === 'REMOTE' ? 'block' : 'hidden'} lg:block bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl p-4 sm:p-5 space-y-3`}
-            >
-              <h2 className="text-xs font-bold text-[#1F1A17] flex items-center gap-1.5">
-                <KeyRound className="w-4 h-4 text-[#7A4B1A]" />
-                Ganti PIN Khusus Owner
-              </h2>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5E5248] mb-1">
-                    PIN Baru (4–8 angka)
-                  </label>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={8}
-                    value={newPin}
-                    onChange={(e) => setNewPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="••••••"
-                    className="w-full px-3 py-1.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-xs text-[#1F1A17]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5E5248] mb-1">
-                    Ulangi PIN Baru
-                  </label>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={8}
-                    value={confirmPin}
-                    onChange={(e) => setConfirmPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="••••••"
-                    className="w-full px-3 py-1.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-xs text-[#1F1A17]"
-                  />
-                </div>
-              </div>
-
-              {pinMsg && (
-                <div className="text-xs font-semibold text-[#285A3B]">{pinMsg}</div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-2 bg-[#2A211B] hover:bg-[#1A1410] text-[#FAF8F5] text-xs font-bold rounded-lg transition-colors"
-              >
-                Simpan PIN Owner Baru
-              </button>
-
-              <div className="pt-3 border-t border-[#EAE3D7] space-y-2">
-                <div className="text-[11px] font-bold text-[#3D332B]">Ganti PIN Login Kasir</div>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={8}
-                    value={newCashierPin}
-                    onChange={(e) => setNewCashierPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="PIN Kasir baru (4-8 angka)"
-                    className="flex-1 px-3 py-1.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-xs text-[#1F1A17]"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleChangeCashierPin}
-                    className="px-3 py-1.5 bg-[#EFE9DF] hover:bg-[#E5DDD0] text-[#1F1A17] text-xs font-bold rounded-lg border border-[#D5C9B8]"
-                  >
-                    Simpan
-                  </button>
-                </div>
-                {cashierPinMsg && (
-                  <div className="text-[11px] font-semibold text-[#285A3B]">{cashierPinMsg}</div>
-                )}
-              </div>
-            </form>
           </div>
 
-          {/* Right: Immutable Audit Trail */}
+        {/* Right: Audit Trail */}
           <div className={`${mobileSection === 'AUDIT' ? 'flex' : 'hidden'} lg:flex lg:col-span-7 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl overflow-hidden flex-col max-h-[600px] lg:max-h-[760px]`}>
             <div className="px-4 sm:px-5 py-3.5 border-b border-[#E5DDD0] bg-[#EFE9DF]/50 flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -621,7 +449,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   Audit Log Aktivitas (Permanen & Anti-Hapus)
                 </h2>
                 <p className="text-[11px] text-[#7D6F63]">
-                  Mencatat seluruh pembatalan struk, hapus open bill, ubah harga, dan percobaan PIN gagal.
+                  Mencatat seluruh pembatalan struk, hapus open bill, perubahan menu/harga, dan aktivitas masuk.
                 </p>
               </div>
 

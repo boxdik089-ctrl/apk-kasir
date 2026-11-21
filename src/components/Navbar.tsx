@@ -6,7 +6,6 @@ import {
   Printer, 
   BarChart3, 
   Shield,
-  Lock,
   Unlock,
   Minus, 
   Square, 
@@ -155,9 +154,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onRequestOwnerLogin}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EFE9DF] hover:bg-[#E5DDD0] text-[#3D332B] border border-[#DDD3C5] rounded-lg text-[11px] sm:text-xs font-semibold transition-colors active:scale-[0.98]"
-              title="Masuk dengan PIN khusus Owner"
+              title="Pindah ke Mode Owner"
             >
-              <Lock className="w-3.5 h-3.5" />
+              <Shield className="w-3.5 h-3.5 text-[#285A3B]" />
               <span className="hidden sm:inline">{activeUserName} ({activeShift === 'Shift Pagi' ? 'Pagi' : 'Siang'}) • </span>
               <span>Owner</span>
             </button>

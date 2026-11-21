@@ -146,11 +146,11 @@ const defaultStore = {
     security: {
       ownerPinHash: DEFAULT_PIN_HASH,
       cashierPinHash: DEFAULT_CASHIER_PIN_HASH,
-      requireCashierPin: true,
+      requireCashierPin: false,
       cashierCanAddMenu: true,
-      cashierCanEditMenu: false,
-      cashierCanViewReports: false,
-      cashierCanDeleteHeldCart: false,
+      cashierCanEditMenu: true,
+      cashierCanViewReports: true,
+      cashierCanDeleteHeldCart: true,
       terminalLocked: false
     }
   }
@@ -236,13 +236,6 @@ function getLanUrls() {
 function verifyOwnerPin(pin) {
   if (!pin) return false;
   const targetHash = store.settings?.security?.ownerPinHash || DEFAULT_PIN_HASH;
-  return sha256(pin) === targetHash;
-}
-
-function verifyCashierPin(pin) {
-  if (store.settings?.security?.requireCashierPin === false) return true;
-  if (!pin) return false;
-  const targetHash = store.settings?.security?.cashierPinHash || DEFAULT_CASHIER_PIN_HASH;
   return sha256(pin) === targetHash;
 }
 
@@ -393,36 +386,22 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, revision: store.revision, seeded: store.seeded });
     }
 
-    // 5. Verify Owner PIN
+    // 5. Verify Owner Login (No PIN required)
     if (req.method === 'POST' && pathname === '/api/owner/verify') {
       const body = await readJsonBody(req);
-      const ok = verifyOwnerPin(body.pin);
-      if (ok) {
-        appendAudit(body.actor || 'Owner', 'OWNER', 'OWNER_LOGIN', `Owner berhasil masuk dari ${body.device || 'perangkat'}`);
-        persistStore();
-        return sendJson(res, 200, { ok: true });
-      } else {
-        appendAudit(body.actor || 'Tidak Dikenal', 'CASHIER', 'OWNER_LOGIN_FAILED', `Percobaan PIN Owner gagal dari ${body.device || 'perangkat'}`);
-        persistStore();
-        return sendJson(res, 401, { ok: false, error: 'PIN Owner salah.' });
-      }
+      appendAudit(body.actor || 'Owner', 'OWNER', 'OWNER_LOGIN', `Owner berhasil masuk dari ${body.device || 'perangkat'}`);
+      persistStore();
+      return sendJson(res, 200, { ok: true });
     }
 
-    // 5b. Verify Cashier Login
+    // 5b. Verify Cashier Login (No PIN required)
     if (req.method === 'POST' && pathname === '/api/cashier/verify') {
       const body = await readJsonBody(req);
       const cashierName = String(body.cashierName || '').trim() || 'Kasir';
       const shift = body.shift === 'Shift Siang' ? 'Shift Siang' : 'Shift Pagi';
-      const ok = verifyCashierPin(body.pin);
-      if (ok) {
-        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cashierName} masuk ${shift} dari ${body.device || 'perangkat'}`);
-        persistStore();
-        return sendJson(res, 200, { ok: true, cashierName, shift });
-      } else {
-        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan PIN Kasir gagal atas nama ${cashierName} (${shift}, ${body.device || 'perangkat'})`);
-        persistStore();
-        return sendJson(res, 401, { ok: false, error: 'PIN Kasir salah.' });
-      }
+      appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cashierName} masuk ${shift} dari ${body.device || 'perangkat'}`);
+      persistStore();
+      return sendJson(res, 200, { ok: true, cashierName, shift });
     }
 
     // 6. Add Transaction (Append-Only)
@@ -440,16 +419,11 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 201, { ok: true, transaction: savedTx, revision: store.revision });
     }
 
-    // 7. Void Transaction (STRICTLY REQUIRES OWNER PIN)
+    // 7. Void Transaction (With Reason & Audit Log)
     const voidMatch = pathname.match(/^\/api\/transactions\/(\d+)\/void$/);
     if (req.method === 'POST' && voidMatch) {
       const txId = Number(voidMatch[1]);
       const body = await readJsonBody(req);
-      if (!verifyOwnerPin(body.ownerPin)) {
-        appendAudit(body.actor || 'Kasir', 'CASHIER', 'OWNER_LOGIN_FAILED', `Gagal void struk ID #${txId} — PIN Owner salah`);
-        persistStore();
-        return sendJson(res, 403, { ok: false, error: 'PIN Owner tidak valid. Kasir tidak diizinkan membatalkan struk.' });
-      }
       const reason = String(body.reason || '').trim();
       if (!reason) {
         return sendJson(res, 400, { ok: false, error: 'Alasan pembatalan wajib diisi.' });
@@ -477,7 +451,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, transaction: store.transactions[idx], revision: store.revision });
     }
 
-    // 8. Held Carts (Create / Restore / Delete with Anti-Fraud Audit)
+    // 8. Held Carts (Create / Restore / Delete with Audit)
     if (req.method === 'POST' && pathname === '/api/held-carts') {
       const cart = await readJsonBody(req);
       const nextId = store.heldCarts.reduce((max, c) => Math.max(max, c.id || 0), 0) + 1;
@@ -491,19 +465,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'DELETE' && heldMatch) {
       const cartId = Number(heldMatch[1]);
       const body = await readJsonBody(req);
-      const isRestoring = !!body.isRestoring; // restoring to active cart to pay is allowed
-      const canDelete = store.settings?.security?.cashierCanDeleteHeldCart;
-
-      if (!isRestoring && !canDelete && !verifyOwnerPin(body.ownerPin)) {
-        appendAudit(
-          body.actor || 'Kasir',
-          'CASHIER',
-          'OWNER_LOGIN_FAILED',
-          `Percobaan hapus Open Bill #${cartId} ditolak — memerlukan PIN Owner`
-        );
-        persistStore();
-        return sendJson(res, 403, { ok: false, error: 'Menghapus Open Bill memerlukan PIN Owner.' });
-      }
+      const isRestoring = !!body.isRestoring;
 
       const idx = store.heldCarts.findIndex((c) => c.id === cartId);
       if (idx !== -1) {
@@ -527,9 +489,6 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/products') {
       const body = await readJsonBody(req);
       const isOwner = verifyOwnerPin(body.ownerPin);
-      if (!isOwner && !store.settings?.security?.cashierCanAddMenu) {
-        return sendJson(res, 403, { ok: false, error: 'Penambahan menu dikunci oleh Owner.' });
-      }
       const product = body.product || body;
       const nextId = store.products.reduce((max, p) => Math.max(max, p.id || 0), 0) + 1;
       const saved = { ...product, id: nextId };
@@ -554,9 +513,6 @@ const server = http.createServer(async (req, res) => {
       const prodId = Number(prodMatch[1]);
       const body = await readJsonBody(req);
       const isOwner = verifyOwnerPin(body.ownerPin);
-      if (!isOwner && !store.settings?.security?.cashierCanEditMenu) {
-        return sendJson(res, 403, { ok: false, error: 'Edit harga/menu hanya dapat dilakukan oleh Owner.' });
-      }
       const idx = store.products.findIndex((p) => p.id === prodId);
       if (idx === -1) return sendJson(res, 404, { ok: false, error: 'Menu tidak ditemukan.' });
       const prev = store.products[idx];
@@ -576,9 +532,6 @@ const server = http.createServer(async (req, res) => {
       const prodId = Number(prodMatch[1]);
       const body = await readJsonBody(req);
       const isOwner = verifyOwnerPin(body.ownerPin);
-      if (!isOwner && !store.settings?.security?.cashierCanEditMenu) {
-        return sendJson(res, 403, { ok: false, error: 'Penghapusan menu hanya dapat dilakukan oleh Owner.' });
-      }
       const idx = store.products.findIndex((p) => p.id === prodId);
       if (idx !== -1) {
         const removed = store.products[idx];
@@ -594,12 +547,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, revision: store.revision });
     }
 
-    // 10. Reset Sample Menus (Owner only)
+    // 10. Reset Sample Menus
     if (req.method === 'POST' && pathname === '/api/products/reset-sample') {
       const body = await readJsonBody(req);
-      if (!verifyOwnerPin(body.ownerPin)) {
-        return sendJson(res, 403, { ok: false, error: 'Diperlukan PIN Owner untuk mereset daftar menu.' });
-      }
       store.products = (body.products || []).map((p, idx) => ({ ...p, id: idx + 1 }));
       store.seeded = true;
       appendAudit('Owner', 'OWNER', 'MENU_CHANGED', 'Memuat ulang daftar menu contoh cafe');
@@ -630,12 +580,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, settings: store.settings, revision: store.revision });
     }
 
-    // 12. Update Settings & Security Controls (Owner only)
+    // 12. Update Settings & Controls
     if (req.method === 'PUT' && pathname === '/api/settings') {
       const body = await readJsonBody(req);
-      if (!verifyOwnerPin(body.ownerPin)) {
-        return sendJson(res, 403, { ok: false, error: 'PIN Owner tidak valid.' });
-      }
       const nextSettings = { ...store.settings, ...(body.settings || {}), id: 1 };
       if (body.newOwnerPin && String(body.newOwnerPin).length >= 4) {
         nextSettings.security = {
@@ -667,19 +614,16 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, settings: store.settings, revision: store.revision });
     }
 
-    // 13. Restore Backup (Owner only)
+    // 13. Restore Backup
     if (req.method === 'POST' && pathname === '/api/restore') {
       const body = await readJsonBody(req);
-      if (!verifyOwnerPin(body.ownerPin)) {
-        return sendJson(res, 403, { ok: false, error: 'Restore database memerlukan PIN Owner.' });
-      }
       if (Array.isArray(body.products)) store.products = body.products;
       if (Array.isArray(body.transactions)) store.transactions = body.transactions;
       if (body.settings) {
         store.settings = {
           ...store.settings,
           ...body.settings,
-          security: store.settings.security // preserve current owner PIN & locks
+          security: store.settings.security
         };
       }
       store.seeded = true;
@@ -688,7 +632,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, revision: store.revision });
     }
 
-    // 14. Remote Internet Tunnel Control (Owner only for start/stop)
+    // 14. Remote Internet Tunnel Control
     if (req.method === 'GET' && pathname === '/api/remote-tunnel/status') {
       return sendJson(res, 200, {
         status: tunnelState.status,
@@ -699,10 +643,6 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && pathname === '/api/remote-tunnel/start') {
-      const body = await readJsonBody(req);
-      if (!verifyOwnerPin(body.ownerPin)) {
-        return sendJson(res, 403, { ok: false, error: 'Diperlukan PIN Owner untuk membuka akses internet.' });
-      }
       const result = await startRemoteTunnel();
       return sendJson(res, result.ok ? 200 : 500, {
         ...result,
@@ -711,10 +651,6 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && pathname === '/api/remote-tunnel/stop') {
-      const body = await readJsonBody(req);
-      if (!verifyOwnerPin(body.ownerPin)) {
-        return sendJson(res, 403, { ok: false, error: 'PIN Owner tidak valid.' });
-      }
       stopRemoteTunnel();
       return sendJson(res, 200, { ok: true, status: 'idle', url: null });
     }

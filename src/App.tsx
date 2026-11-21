@@ -9,7 +9,6 @@ import { ReceiptDesigner } from './components/receipt/ReceiptDesigner';
 import { PrinterSettingsScreen } from './components/settings/PrinterSettings';
 import { ReportsScreen } from './components/reports/ReportsScreen';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
-import { OwnerPinModal } from './components/auth/OwnerPinModal';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { SyncService } from './services/syncService';
 
@@ -26,8 +25,6 @@ export function App() {
   const [activeUserName, setActiveUserName] = useState<string>('Kasir');
   const [activeShift, setActiveShift] = useState<CashierShift>('Shift Pagi');
   const [ownerPin, setOwnerPin] = useState<string>('');
-  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [pendingTab, setPendingTab] = useState<AppTab | null>(null);
 
   const isOwnerModeUrl = new URLSearchParams(window.location.search).get('mode') === 'owner';
 
@@ -69,24 +66,10 @@ export function App() {
   }, []);
 
   const handleSelectTab = (tab: AppTab) => {
-    const isRestricted = tab === 'owner' || tab === 'receipt';
-
-    if (isRestricted && userRole !== 'OWNER') {
-      setPendingTab(tab);
-      setIsPinModalOpen(true);
-      return;
+    if ((tab === 'owner' || tab === 'receipt') && userRole !== 'OWNER') {
+      setUserRole('OWNER');
     }
-
     setCurrentTab(tab);
-  };
-
-  const handleOwnerVerified = (pin: string) => {
-    setOwnerPin(pin);
-    setUserRole('OWNER');
-    if (pendingTab) {
-      setCurrentTab(pendingTab);
-      setPendingTab(null);
-    }
   };
 
   const handleLockToCashier = () => {
@@ -162,8 +145,8 @@ export function App() {
         activeShift={activeShift}
         isSyncOnline={isSyncOnline}
         onRequestOwnerLogin={() => {
-          setPendingTab('owner');
-          setIsPinModalOpen(true);
+          setUserRole('OWNER');
+          setCurrentTab('owner');
         }}
         onLockToCashier={handleLockToCashier}
         onLogout={handleLogout}
@@ -179,17 +162,17 @@ export function App() {
               Terminal Kasir Sedang Dikunci oleh Owner
             </h1>
             <p className="text-xs text-[#7D6F63] mt-1.5 max-w-sm leading-relaxed">
-              Owner mengaktifkan kunci jarak jauh untuk terminal kasir ini. Hubungi Owner atau masukkan PIN Owner untuk membuka kembali.
+              Owner mengaktifkan kunci jarak jauh untuk terminal kasir ini. Tekan tombol di bawah untuk masuk sebagai Owner dan membuka kembali.
             </p>
             <button
               type="button"
               onClick={() => {
-                setPendingTab('pos');
-                setIsPinModalOpen(true);
+                setUserRole('OWNER');
+                setCurrentTab('owner');
               }}
               className="mt-5 px-5 py-2.5 bg-[#2A211B] hover:bg-[#1A1410] text-[#FAF8F5] text-xs font-bold rounded-lg transition-colors"
             >
-              Buka dengan PIN Owner
+              Masuk Panel Owner
             </button>
           </div>
         ) : (
@@ -254,18 +237,6 @@ export function App() {
           </>
         )}
       </main>
-
-      <OwnerPinModal
-        isOpen={isPinModalOpen}
-        onClose={() => {
-          setIsPinModalOpen(false);
-          setPendingTab(null);
-        }}
-        onVerified={(pin) => handleOwnerVerified(pin)}
-        currentPinHash={settings.security?.ownerPinHash}
-        title="Masuk Akun Owner"
-        description="Masukkan PIN Owner untuk mengakses halaman laporan, pengaturan sistem, atau panel remote."
-      />
     </div>
   );
 }

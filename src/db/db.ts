@@ -32,11 +32,11 @@ export const db = new KasirDatabase();
 export const defaultSecuritySettings: SecuritySettings = {
   ownerPinHash: DEFAULT_OWNER_PIN_HASH,
   cashierPinHash: DEFAULT_CASHIER_PIN_HASH,
-  requireCashierPin: true,
+  requireCashierPin: false,
   cashierCanAddMenu: true,
-  cashierCanEditMenu: false,
-  cashierCanViewReports: false,
-  cashierCanDeleteHeldCart: false,
+  cashierCanEditMenu: true,
+  cashierCanViewReports: true,
+  cashierCanDeleteHeldCart: true,
   terminalLocked: false
 };
 

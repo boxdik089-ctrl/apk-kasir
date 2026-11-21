@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import type { Transaction, ReceiptSettings, UserRole, CashierShift } from '../../types';
 import { ReceiptView } from '../receipt/ReceiptView';
-import { OwnerPinModal } from '../auth/OwnerPinModal';
 import { PrinterService } from '../../services/printerService';
 import { SyncService } from '../../services/syncService';
 import { db } from '../../db/db';
@@ -28,6 +27,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [voidTargetTx, setVoidTargetTx] = useState<Transaction | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidError, setVoidError] = useState<string | null>(null);
+  const [isVoiding, setIsVoiding] = useState(false);
   const [isReprinting, setIsReprinting] = useState(false);
   const [reprintFeedback, setReprintFeedback] = useState<string | null>(null);
 
@@ -136,21 +138,34 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
     }
   };
 
-  // Void/Cancel Transaction (Always requires Owner PIN + written reason)
-  const handleVoidWithPin = async (pin: string, reason?: string) => {
+  // Void/Cancel Transaction (Records reason to Audit Log, no PIN prompt)
+  const handleConfirmVoid = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!voidTargetTx?.id) return;
-    const res = await SyncService.voidTransaction(
-      voidTargetTx.id,
-      pin,
-      reason || 'Dibatalkan oleh Owner',
-      userRole === 'OWNER' ? 'Owner' : voidTargetTx.cashierName
-    );
-    if (!res.ok) {
-      throw new Error(res.error || 'Gagal membatalkan transaksi.');
+    if (!voidReason.trim()) {
+      setVoidError('Alasan pembatalan wajib diisi.');
+      return;
     }
-    setVoidTargetTx(null);
-    setSelectedTx(null);
-    loadTransactions();
+    setIsVoiding(true);
+    setVoidError(null);
+    try {
+      const res = await SyncService.voidTransaction(
+        voidTargetTx.id,
+        '',
+        voidReason.trim(),
+        userRole === 'OWNER' ? 'Owner' : voidTargetTx.cashierName
+      );
+      if (!res.ok) {
+        setVoidError(res.error || 'Gagal membatalkan transaksi.');
+        return;
+      }
+      setVoidTargetTx(null);
+      setVoidReason('');
+      setSelectedTx(null);
+      loadTransactions();
+    } finally {
+      setIsVoiding(false);
+    }
   };
 
   // Export to CSV
@@ -517,10 +532,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
               {selectedTx.status === 'COMPLETED' && (
                 <button
                   type="button"
-                  onClick={() => setVoidTargetTx(selectedTx)}
+                  onClick={() => {
+                    setVoidReason('');
+                    setVoidError(null);
+                    setVoidTargetTx(selectedTx);
+                  }}
                   className="px-3 py-1.5 bg-[#FAF8F5] hover:bg-[#FBEAE8] text-[#9A3B3B] text-xs font-semibold rounded-lg border border-[#F2C2BD] transition-colors"
                 >
-                  Batalkan (Void Owner)
+                  Batalkan Struk
                 </button>
               )}
 
@@ -548,16 +567,69 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
         </div>
       )}
 
-      <OwnerPinModal
-        isOpen={!!voidTargetTx}
-        onClose={() => setVoidTargetTx(null)}
-        onVerified={handleVoidWithPin}
-        requireReason={true}
-        reasonPlaceholder="Misal: Tamu batal pesan / salah ketik item"
-        currentPinHash={settings.security?.ownerPinHash}
-        title="Otorisasi Pembatalan (Void)"
-        description={`Membatalkan struk ${voidTargetTx?.invoiceNumber || ''} tidak akan menghapus data riwayat, melainkan menandai batal dan mencatatnya di Audit Log Owner.`}
-      />
+      {voidTargetTx && (
+        <div className="fixed inset-0 z-[60] bg-[#1F1A17]/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <form
+            onSubmit={handleConfirmVoid}
+            className="bg-[#FAF8F5] border border-[#E5DDD0] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-pop-in"
+          >
+            <div className="px-5 py-4 border-b border-[#E5DDD0] bg-[#F2ECE2]/70 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-extrabold text-[#1F1A17]">Konfirmasi Pembatalan Struk</h3>
+                <p className="text-[11px] text-[#7D6F63] mt-0.5">{voidTargetTx.invoiceNumber}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVoidTargetTx(null)}
+                className="p-1.5 rounded-lg text-[#8C7E71] hover:text-[#1F1A17] hover:bg-[#E5DDD0]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-[#5E5248] leading-relaxed">
+                Data struk tetap tersimpan di riwayat dengan status <strong>Batal</strong> dan tercatat ke Audit Log.
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-[#1F1A17] mb-1">
+                  Alasan Pembatalan <span className="text-[#9A3B3B]">*</span>
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={voidReason}
+                  onChange={(e) => {
+                    setVoidReason(e.target.value);
+                    setVoidError(null);
+                  }}
+                  placeholder="Misal: Tamu batal pesan / salah ketik item"
+                  className="w-full px-3 py-2 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-xs text-[#1F1A17] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2A211B]"
+                />
+              </div>
+              {voidError && (
+                <div className="text-xs text-[#9A3B3B] font-medium">{voidError}</div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setVoidTargetTx(null)}
+                  className="flex-1 py-2 bg-[#EFE9DF] hover:bg-[#E5DDD0] text-[#3D332B] text-xs font-bold rounded-lg transition-colors"
+                >
+                  Kembali
+                </button>
+                <button
+                  type="submit"
+                  disabled={isVoiding}
+                  className="flex-1 py-2 bg-[#9A3B3B] hover:bg-[#7D2E2E] text-[#FAF8F5] text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {isVoiding ? 'Memproses...' : 'Batalkan Struk'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
       </div>
     </div>
   );

@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import type { Product, ReceiptSettings, UserRole } from '../../types';
 import { ProductModal } from './ProductModal';
-import { OwnerPinModal } from '../auth/OwnerPinModal';
 import { PrinterService } from '../../services/printerService';
 import { SyncService } from '../../services/syncService';
 import { initialCafeProducts } from '../../db/db';
@@ -25,7 +24,7 @@ interface ProductManagementProps {
 
 export const ProductManagement: React.FC<ProductManagementProps> = ({
   products,
-  settings,
+  settings: _settings,
   userRole,
   ownerPin,
   onRefreshProducts
@@ -34,14 +33,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
-  const [pendingAuth, setPendingAuth] = useState<{
-    title: string;
-    description: string;
-    onVerified: (pin: string) => Promise<void> | void;
-  } | null>(null);
-
-  const canEditOrDelete = userRole === 'OWNER' || !!settings.security?.cashierCanEditMenu;
-  const canAddMenu = userRole === 'OWNER' || settings.security?.cashierCanAddMenu !== false;
 
   const categories = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
   if (categories.length === 0) categories.push('Coffee', 'Non-Coffee', 'Pastry & Toast', 'Main Course');
@@ -70,21 +61,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   };
 
   const handleDeleteProduct = async (id: number, name: string) => {
-    if (!canEditOrDelete) {
-      setPendingAuth({
-        title: 'Hapus Menu Terkunci',
-        description: `Hanya Owner yang dapat menghapus menu "${name}". Masukkan PIN Owner untuk melanjutkan.`,
-        onVerified: async (pin) => {
-          const res = await SyncService.deleteProduct(id, pin, 'Owner');
-          if (!res.ok) throw new Error(res.error);
-          onRefreshProducts();
-        }
-      });
-      return;
-    }
-
     if (confirm(`Yakin ingin menghapus menu "${name}"?`)) {
-      const res = await SyncService.deleteProduct(id, ownerPin, 'Owner');
+      const res = await SyncService.deleteProduct(id, ownerPin, userRole === 'OWNER' ? 'Owner' : 'Kasir');
       if (!res.ok) {
         alert(res.error || 'Gagal menghapus menu.');
         return;
@@ -94,19 +72,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   };
 
   const handleLoadSampleCafeMenus = async () => {
-    if (!canEditOrDelete) {
-      setPendingAuth({
-        title: 'Reset Menu Memerlukan PIN Owner',
-        description: 'Reset seluruh daftar menu hanya dapat dilakukan oleh Owner.',
-        onVerified: async (pin) => {
-          const res = await SyncService.resetSampleMenus(initialCafeProducts, pin);
-          if (!res.ok) throw new Error(res.error);
-          onRefreshProducts();
-        }
-      });
-      return;
-    }
-
     if (confirm('Muat daftar contoh Menu Cafe (Kopi, Non-Kopi, Pastry, Makanan)? Data menu lama akan digantikan dengan menu cafe.')) {
       const res = await SyncService.resetSampleMenus(initialCafeProducts, ownerPin);
       if (!res.ok) {
@@ -184,17 +149,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           <button
             type="button"
             onClick={() => {
-              if (!canAddMenu) {
-                setPendingAuth({
-                  title: 'Tambah Menu Terkunci',
-                  description: 'Penambahan menu dikunci oleh Owner. Masukkan PIN Owner untuk melanjutkan.',
-                  onVerified: () => {
-                    setProductToEdit(null);
-                    setIsModalOpen(true);
-                  }
-                });
-                return;
-              }
               setProductToEdit(null);
               setIsModalOpen(true);
             }}
@@ -297,17 +251,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (!canEditOrDelete) {
-                        setPendingAuth({
-                          title: 'Ubah Harga / Menu Terkunci',
-                          description: 'Untuk mencegah perubahan harga oleh kasir, pengeditan menu memerlukan PIN Owner.',
-                          onVerified: () => {
-                            setProductToEdit(prod);
-                            setIsModalOpen(true);
-                          }
-                        });
-                        return;
-                      }
                       setProductToEdit(prod);
                       setIsModalOpen(true);
                     }}
@@ -388,17 +331,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (!canEditOrDelete) {
-                                setPendingAuth({
-                                  title: 'Ubah Harga / Menu Terkunci',
-                                  description: 'Untuk mencegah perubahan harga oleh kasir, pengeditan menu memerlukan PIN Owner.',
-                                  onVerified: () => {
-                                    setProductToEdit(prod);
-                                    setIsModalOpen(true);
-                                  }
-                                });
-                                return;
-                              }
                               setProductToEdit(prod);
                               setIsModalOpen(true);
                             }}
@@ -432,17 +364,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         productToEdit={productToEdit}
         onSave={handleSaveProduct}
         categories={categories}
-      />
-
-      <OwnerPinModal
-        isOpen={!!pendingAuth}
-        onClose={() => setPendingAuth(null)}
-        onVerified={async (pin) => {
-          if (pendingAuth) await pendingAuth.onVerified(pin);
-        }}
-        currentPinHash={settings.security?.ownerPinHash}
-        title={pendingAuth?.title}
-        description={pendingAuth?.description}
       />
       </div>
     </div>

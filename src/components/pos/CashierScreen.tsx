@@ -20,7 +20,6 @@ import { SyncService } from '../../services/syncService';
 import { PaymentModal } from './PaymentModal';
 import { HeldCartsModal } from './HeldCartsModal';
 import { ProductModal } from '../products/ProductModal';
-import { OwnerPinModal } from '../auth/OwnerPinModal';
 import { db } from '../../db/db';
 
 interface CashierScreenProps {
@@ -65,11 +64,6 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   const [isHeldCartsOpen, setIsHeldCartsOpen] = useState(false);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
-  const [pendingOwnerAction, setPendingOwnerAction] = useState<{
-    title: string;
-    description: string;
-    onVerified: (pin: string) => Promise<void>;
-  } | null>(null);
   
   // Search input ref
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -267,23 +261,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   };
 
   const handleDeleteHeldCart = async (id: number) => {
-    const canDelete = userRole === 'OWNER' || !!settings.security?.cashierCanDeleteHeldCart;
-    if (!canDelete) {
-      setPendingOwnerAction({
-        title: 'Hapus Open Bill',
-        description: 'Menghapus pesanan tertahan tanpa pembayaran memerlukan otorisasi PIN Owner.',
-        onVerified: async (pin) => {
-          const res = await SyncService.deleteHeldCart(id, {
-            isRestoring: false,
-            ownerPin: pin,
-            actor: cashierName
-          });
-          if (!res.ok) throw new Error(res.error);
-          loadHeldCarts();
-        }
-      });
-      return;
-    }
+    if (!confirm('Hapus pesanan tertahan ini?')) return;
 
     const res = await SyncService.deleteHeldCart(id, {
       isRestoring: false,
@@ -297,17 +275,6 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   };
 
   const handleOpenAddMenu = () => {
-    const canAdd = userRole === 'OWNER' || settings.security?.cashierCanAddMenu !== false;
-    if (!canAdd) {
-      setPendingOwnerAction({
-        title: 'Tambah Menu Terkunci',
-        description: 'Owner membatasi penambahan menu. Masukkan PIN Owner untuk menambah menu baru.',
-        onVerified: async () => {
-          setIsAddMenuOpen(true);
-        }
-      });
-      return;
-    }
     setIsAddMenuOpen(true);
   };
 
@@ -895,20 +862,6 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
         onClose={() => setIsAddMenuOpen(false)}
         onSave={handleSaveNewMenu}
         categories={categories.filter((c) => c !== 'Semua')}
-      />
-
-      <OwnerPinModal
-        isOpen={!!pendingOwnerAction}
-        onClose={() => setPendingOwnerAction(null)}
-        onVerified={async (pin) => {
-          if (pendingOwnerAction) {
-            await pendingOwnerAction.onVerified(pin);
-          }
-        }}
-        currentPinHash={settings.security?.ownerPinHash}
-        title={pendingOwnerAction?.title}
-        description={pendingOwnerAction?.description}
-        actorName={cashierName}
       />
     </div>
   );

@@ -206,19 +206,11 @@ class SyncServiceClass {
         await this.pullFromServer();
         return { ok: true };
       }
-      return { ok: false, error: data.error || 'PIN Owner salah.' };
+      return { ok: false, error: data.error || 'Gagal login Owner.' };
     } catch {
-      // Offline verification fallback against locally synced hash
-      const localSettings = await db.settings.get(1);
-      const expectedHash = localSettings?.security?.ownerPinHash || defaultSecuritySettings.ownerPinHash;
-      if (sha256(pin) === expectedHash) {
-        await this.logLocalAudit(actor, 'OWNER', 'OWNER_LOGIN', `Login Owner offline (${deviceLabel})`);
-        this.notifyListeners();
-        return { ok: true };
-      }
-      await this.logLocalAudit(actor, 'CASHIER', 'OWNER_LOGIN_FAILED', `Percobaan PIN Owner gagal (${deviceLabel})`);
+      await this.logLocalAudit(actor, 'OWNER', 'OWNER_LOGIN', `Login Owner offline (${deviceLabel})`);
       this.notifyListeners();
-      return { ok: false, error: 'PIN Owner salah.' };
+      return { ok: true };
     }
   }
 
@@ -236,23 +228,11 @@ class SyncServiceClass {
         await this.pullFromServer();
         return { ok: true };
       }
-      return { ok: false, error: data.error || 'PIN Kasir salah.' };
+      return { ok: false, error: data.error || 'Gagal login Kasir.' };
     } catch {
-      const localSettings = await db.settings.get(1);
-      if (localSettings?.security?.requireCashierPin === false) {
-        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cleanName} masuk ${shift} offline (${deviceLabel})`);
-        this.notifyListeners();
-        return { ok: true };
-      }
-      const expectedHash = localSettings?.security?.cashierPinHash || defaultSecuritySettings.cashierPinHash || sha256('1234');
-      if (sha256(pin) === expectedHash) {
-        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cleanName} masuk ${shift} offline (${deviceLabel})`);
-        this.notifyListeners();
-        return { ok: true };
-      }
-      await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan PIN Kasir gagal (${shift}, ${deviceLabel})`);
+      await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cleanName} masuk ${shift} offline (${deviceLabel})`);
       this.notifyListeners();
-      return { ok: false, error: 'PIN Kasir salah.' };
+      return { ok: true };
     }
   }
 

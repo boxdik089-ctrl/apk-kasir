@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, Shield, User, Lock, Delete, AlertCircle, LogIn, Sun, Sunset } from 'lucide-react';
+import { Coffee, Shield, User, Lock, AlertCircle, LogIn, Sun, Sunset } from 'lucide-react';
 import type { ReceiptSettings, UserRole, CashierShift } from '../../types';
-import { DEFAULT_OWNER_PIN_HASH, DEFAULT_CASHIER_PIN_HASH } from '../../utils/hash';
 import { SyncService } from '../../services/syncService';
 
 interface LoginScreenProps {
@@ -21,17 +20,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [role, setRole] = useState<UserRole>(defaultMode);
   const [cashierName, setCashierName] = useState('');
   const [shift, setShift] = useState<CashierShift>(defaultShiftByHour);
-  const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isTerminalLocked = !!settings.security?.terminalLocked;
-  const requireCashierPin = settings.security?.requireCashierPin !== false;
-
-  const isDefaultOwnerPin =
-    !settings.security?.ownerPinHash || settings.security.ownerPinHash === DEFAULT_OWNER_PIN_HASH;
-  const isDefaultCashierPin =
-    !settings.security?.cashierPinHash || settings.security.cashierPinHash === DEFAULT_CASHIER_PIN_HASH;
 
   useEffect(() => {
     setRole(defaultMode);
@@ -39,15 +31,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   const handleSwitchRole = (nextRole: UserRole) => {
     setRole(nextRole);
-    setPin('');
     setError(null);
-  };
-
-  const handleDigit = (digit: string) => {
-    if (pin.length < 8) {
-      setPin((prev) => prev + digit);
-      setError(null);
-    }
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -61,20 +45,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       }
       const cleanName = cashierName.trim();
       if (!cleanName) {
-        setError('Masukkan nama kasir / barista terlebih dahulu.');
-        return;
-      }
-      if (requireCashierPin && pin.length < 4) {
-        setError('Masukkan minimal 4 digit PIN Kasir.');
+        setError('Masukkan nama kasir terlebih dahulu.');
         return;
       }
 
       setIsSubmitting(true);
       try {
-        const res = await SyncService.verifyCashierPin(pin, cleanName, shift);
+        const res = await SyncService.verifyCashierPin('', cleanName, shift);
         if (!res.ok) {
-          setError(res.error || 'PIN Kasir salah.');
-          setPin('');
+          setError(res.error || 'Gagal masuk kasir.');
           return;
         }
         onLoginSuccess('CASHIER', cleanName, undefined, shift);
@@ -84,26 +63,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       return;
     }
 
-    // OWNER login
-    if (pin.length < 4) {
-      setError('Masukkan minimal 4 digit PIN Owner.');
-      return;
-    }
+    // OWNER login (tanpa PIN)
     setIsSubmitting(true);
     try {
-      const res = await SyncService.verifyOwnerPin(pin, 'Owner');
+      const res = await SyncService.verifyOwnerPin('', 'Owner');
       if (!res.ok) {
-        setError(res.error || 'PIN Owner salah.');
-        setPin('');
+        setError(res.error || 'Gagal masuk dashboard Owner.');
         return;
       }
-      onLoginSuccess('OWNER', 'Owner', pin);
+      onLoginSuccess('OWNER', 'Owner', '');
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const showPinPad = role === 'OWNER' || requireCashierPin;
 
   return (
     <div className="min-h-screen w-screen bg-[#F6F3EC] text-[#1F1A17] flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto">
@@ -232,75 +204,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
           )}
 
-          {showPinPad && (
-            <div className="space-y-3">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-[#3D332B]">
-                    {role === 'OWNER' ? 'PIN Khusus Owner' : 'PIN Kasir'}
-                  </label>
-                  {role === 'OWNER' && isDefaultOwnerPin && (
-                    <span className="text-[11px] font-semibold text-[#874C23]">
-                      PIN bawaan: 123456
-                    </span>
-                  )}
-                  {role === 'CASHIER' && isDefaultCashierPin && (
-                    <span className="text-[11px] font-semibold text-[#874C23]">
-                      PIN bawaan: 1234
-                    </span>
-                  )}
-                </div>
-
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={8}
-                  autoFocus={role === 'OWNER'}
-                  value={pin}
-                  onChange={(e) => {
-                    setPin(e.target.value.replace(/[^0-9]/g, ''));
-                    setError(null);
-                  }}
-                  placeholder={role === 'OWNER' ? '••••••' : '••••'}
-                  className="w-full px-4 py-2.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-center text-xl font-mono tracking-[0.4em] text-[#1F1A17] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2A211B]"
-                />
-              </div>
-
-              {/* Touch Keypad */}
-              <div className="grid grid-cols-3 gap-2">
-                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => handleDigit(d)}
-                    className="py-2.5 bg-[#EFE9DF] hover:bg-[#E5DDD0] active:scale-95 text-[#1F1A17] font-bold text-sm rounded-lg border border-[#E2D9CC] transition-all tabular-nums"
-                  >
-                    {d}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setPin('')}
-                  className="py-2.5 bg-[#F6F3EC] hover:bg-[#EFE9DF] active:scale-95 text-[#7D6F63] font-semibold text-xs rounded-lg border border-[#E5DDD0] transition-all"
-                >
-                  Reset
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDigit('0')}
-                  className="py-2.5 bg-[#EFE9DF] hover:bg-[#E5DDD0] active:scale-95 text-[#1F1A17] font-bold text-sm rounded-lg border border-[#E2D9CC] transition-all tabular-nums"
-                >
-                  0
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPin((prev) => prev.slice(0, -1))}
-                  className="py-2.5 bg-[#F6F3EC] hover:bg-[#EFE9DF] active:scale-95 text-[#5E5248] rounded-lg border border-[#E5DDD0] flex items-center justify-center transition-all"
-                  title="Hapus satu digit"
-                >
-                  <Delete className="w-4 h-4" />
-                </button>
-              </div>
+          {role === 'OWNER' && (
+            <div className="p-3.5 bg-[#F2ECE2]/70 border border-[#E5DDD0] rounded-xl text-xs text-[#5E5248] leading-relaxed">
+              Masuk sebagai <strong className="text-[#1F1A17]">Owner</strong> untuk memantau omzet per shift, riwayat transaksi, desain struk, dan kontrol jarak jauh dari HP.
             </div>
           )}
 

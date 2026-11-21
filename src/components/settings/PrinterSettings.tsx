@@ -17,7 +17,6 @@ import type { ReceiptSettings, ElectronPrinterInfo, Transaction, UserRole } from
 import { PrinterService } from '../../services/printerService';
 import { SyncService } from '../../services/syncService';
 import { ReceiptView } from '../receipt/ReceiptView';
-import { OwnerPinModal } from '../auth/OwnerPinModal';
 import { db } from '../../db/db';
 
 interface PrinterSettingsProps {
@@ -65,7 +64,6 @@ export const PrinterSettingsScreen: React.FC<PrinterSettingsProps> = ({
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
-  const [pendingRestorePayload, setPendingRestorePayload] = useState<any>(null);
 
   const refreshPrinters = async () => {
     setIsScanning(true);
@@ -159,11 +157,6 @@ export const PrinterSettingsScreen: React.FC<PrinterSettingsProps> = ({
           transactions: Array.isArray(json.transactions) ? json.transactions : undefined,
           settings: Array.isArray(json.settings) && json.settings[0] ? json.settings[0] : undefined
         };
-
-        if (userRole !== 'OWNER') {
-          setPendingRestorePayload(payload);
-          return;
-        }
 
         const res = await SyncService.restoreBackup(payload, ownerPin);
         if (!res.ok) {
@@ -528,21 +521,6 @@ export const PrinterSettingsScreen: React.FC<PrinterSettingsProps> = ({
       <div className="fixed -left-[9999px] top-0 pointer-events-none print:left-0 print:top-0 print:pointer-events-auto">
         <ReceiptView transaction={testTransaction} settings={settings} />
       </div>
-
-      <OwnerPinModal
-        isOpen={!!pendingRestorePayload}
-        onClose={() => setPendingRestorePayload(null)}
-        onVerified={async (pin) => {
-          if (!pendingRestorePayload) return;
-          const res = await SyncService.restoreBackup(pendingRestorePayload, pin);
-          if (!res.ok) throw new Error(res.error || 'Gagal memulihkan database.');
-          setBackupStatus('Database berhasil dipulihkan oleh Owner!');
-          setTimeout(() => setBackupStatus(null), 4000);
-        }}
-        currentPinHash={settings.security?.ownerPinHash}
-        title="Otorisasi Restore Database"
-        description="Untuk mencegah penimpaan riwayat transaksi, pemulihan database dari file backup memerlukan PIN Owner."
-      />
       </div>
     </div>
   );
