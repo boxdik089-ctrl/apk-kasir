@@ -29,6 +29,8 @@ export type PaymentMethod = 'CASH' | 'QRIS' | 'TRANSFER' | 'DEBIT' | 'KASBON';
 export type UserRole = 'CASHIER' | 'OWNER';
 
 export type AuditAction =
+  | 'CASHIER_LOGIN'
+  | 'CASHIER_LOGIN_FAILED'
   | 'OWNER_LOGIN'
   | 'OWNER_LOGIN_FAILED'
   | 'VOID_TRANSACTION'
@@ -80,6 +82,8 @@ export interface HeldCart {
 
 export interface SecuritySettings {
   ownerPinHash: string; // SHA-256 hex digest
+  cashierPinHash?: string; // SHA-256 hex digest (default '1234')
+  requireCashierPin?: boolean;
   cashierCanAddMenu: boolean;
   cashierCanEditMenu: boolean;
   cashierCanViewReports: boolean;

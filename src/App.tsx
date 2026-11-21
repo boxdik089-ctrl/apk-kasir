@@ -10,6 +10,7 @@ import { PrinterSettingsScreen } from './components/settings/PrinterSettings';
 import { ReportsScreen } from './components/reports/ReportsScreen';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
 import { OwnerPinModal } from './components/auth/OwnerPinModal';
+import { LoginScreen } from './components/auth/LoginScreen';
 import { SyncService } from './services/syncService';
 
 export function App() {
@@ -19,11 +20,15 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncOnline, setIsSyncOnline] = useState(false);
 
-  // Role & Owner session state (in-memory only; defaults safely to CASHIER)
+  // Authentication & Role state (always opens LoginScreen on initial app load)
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('CASHIER');
+  const [activeUserName, setActiveUserName] = useState<string>('Barista 01');
   const [ownerPin, setOwnerPin] = useState<string>('');
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pendingTab, setPendingTab] = useState<AppTab | null>(null);
+
+  const isOwnerModeUrl = new URLSearchParams(window.location.search).get('mode') === 'owner';
 
   const loadLocalData = async () => {
     try {
@@ -49,13 +54,6 @@ export function App() {
 
       // Start real-time sync with cafe central server
       SyncService.startRealtimeSync();
-
-      // If opened via ?mode=owner (e.g. Owner remote phone), prompt Owner PIN immediately
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('mode') === 'owner') {
-        setPendingTab('owner');
-        setIsPinModalOpen(true);
-      }
     };
 
     boot();
@@ -93,9 +91,32 @@ export function App() {
   const handleLockToCashier = () => {
     setUserRole('CASHIER');
     setOwnerPin('');
+    if (activeUserName === 'Owner') {
+      setActiveUserName('Barista 01');
+    }
     if (currentTab === 'owner' || currentTab === 'receipt') {
       setCurrentTab('pos');
     }
+  };
+
+  const handleLoginSuccess = (role: UserRole, userName: string, pin?: string) => {
+    setUserRole(role);
+    setActiveUserName(userName);
+    if (role === 'OWNER' && pin) {
+      setOwnerPin(pin);
+      setCurrentTab('owner');
+    } else {
+      setOwnerPin('');
+      setCurrentTab('pos');
+    }
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUserRole('CASHIER');
+    setOwnerPin('');
+    setCurrentTab('pos');
   };
 
   const handleUpdateSettings = (newSettings: ReceiptSettings) => {
@@ -113,6 +134,17 @@ export function App() {
     );
   }
 
+  if (!isAuthenticated) {
+    return (
+      <LoginScreen
+        settings={settings}
+        isSyncOnline={isSyncOnline}
+        defaultMode={isOwnerModeUrl ? 'OWNER' : 'CASHIER'}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
   const isTerminalLocked = !!settings.security?.terminalLocked && userRole !== 'OWNER';
 
   return (
@@ -122,12 +154,14 @@ export function App() {
         onSelectTab={handleSelectTab}
         settings={settings}
         userRole={userRole}
+        activeUserName={activeUserName}
         isSyncOnline={isSyncOnline}
         onRequestOwnerLogin={() => {
           setPendingTab('owner');
           setIsPinModalOpen(true);
         }}
         onLockToCashier={handleLockToCashier}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1 flex overflow-hidden relative">
@@ -161,6 +195,7 @@ export function App() {
                 settings={settings}
                 userRole={userRole}
                 ownerPin={ownerPin}
+                initialCashierName={activeUserName}
                 onRefreshProducts={loadLocalData}
                 onNavigateToSettings={() => handleSelectTab('printer')}
               />

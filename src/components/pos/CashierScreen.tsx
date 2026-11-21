@@ -25,6 +25,7 @@ interface CashierScreenProps {
   settings: ReceiptSettings;
   userRole: UserRole;
   ownerPin: string;
+  initialCashierName?: string;
   onRefreshProducts: () => void;
   onNavigateToSettings: () => void;
 }
@@ -34,12 +35,19 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   settings,
   userRole,
   ownerPin,
+  initialCashierName = 'Barista 01',
   onRefreshProducts
 }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
-  const [cashierName, setCashierName] = useState('Barista 01');
+  const [cashierName, setCashierName] = useState(initialCashierName);
+
+  useEffect(() => {
+    if (initialCashierName) {
+      setCashierName(initialCashierName);
+    }
+  }, [initialCashierName]);
   const [orderType, setOrderType] = useState<'Dine-In' | 'Take Away'>('Dine-In');
   const [customerNote, setCustomerNote] = useState('');
   const [overallDiscount, setOverallDiscount] = useState<number>(0);

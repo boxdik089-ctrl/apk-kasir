@@ -222,6 +222,40 @@ class SyncServiceClass {
     }
   }
 
+  public async verifyCashierPin(pin: string, cashierName: string): Promise<{ ok: boolean; error?: string }> {
+    const deviceLabel = /Mobi|Android|iPhone/i.test(navigator.userAgent) ? 'HP / Tablet' : 'Komputer Kasir';
+    const cleanName = cashierName.trim() || 'Kasir';
+    try {
+      const res = await fetch(this.api('/api/cashier/verify'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin, cashierName: cleanName, device: deviceLabel })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await this.pullFromServer();
+        return { ok: true };
+      }
+      return { ok: false, error: data.error || 'PIN Kasir salah.' };
+    } catch {
+      const localSettings = await db.settings.get(1);
+      if (localSettings?.security?.requireCashierPin === false) {
+        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Shift dimulai offline (${deviceLabel})`);
+        this.notifyListeners();
+        return { ok: true };
+      }
+      const expectedHash = localSettings?.security?.cashierPinHash || defaultSecuritySettings.cashierPinHash || sha256('1234');
+      if (sha256(pin) === expectedHash) {
+        await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN', `Shift dimulai offline (${deviceLabel})`);
+        this.notifyListeners();
+        return { ok: true };
+      }
+      await this.logLocalAudit(cleanName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan PIN Kasir gagal (${deviceLabel})`);
+      this.notifyListeners();
+      return { ok: false, error: 'PIN Kasir salah.' };
+    }
+  }
+
   public async addTransaction(tx: Transaction): Promise<Transaction> {
     const id = await db.transactions.add(tx);
     const localSaved = { ...tx, id };
@@ -408,12 +442,12 @@ class SyncServiceClass {
     }
   }
 
-  public async updateSettings(settings: ReceiptSettings, ownerPin: string, newOwnerPin?: string): Promise<{ ok: boolean; error?: string }> {
+  public async updateSettings(settings: ReceiptSettings, ownerPin: string, newOwnerPin?: string, newCashierPin?: string): Promise<{ ok: boolean; error?: string }> {
     try {
       const res = await fetch(this.api('/api/settings'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings, ownerPin, newOwnerPin })
+        body: JSON.stringify({ settings, ownerPin, newOwnerPin, newCashierPin })
       });
       const data = await res.json();
       if (!res.ok || !data.ok) return { ok: false, error: data.error || 'Gagal memperbarui pengaturan.' };
@@ -427,6 +461,12 @@ class SyncServiceClass {
         updated.security = {
           ...(updated.security || defaultSecuritySettings),
           ownerPinHash: sha256(newOwnerPin)
+        };
+      }
+      if (newCashierPin && newCashierPin.length >= 4) {
+        updated.security = {
+          ...(updated.security || defaultSecuritySettings),
+          cashierPinHash: sha256(newCashierPin)
         };
       }
       await db.settings.put(updated);

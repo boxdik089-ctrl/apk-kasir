@@ -83,3 +83,4 @@ export function sha256(ascii: string): string {
 }
 
 export const DEFAULT_OWNER_PIN_HASH = sha256('123456');
+export const DEFAULT_CASHIER_PIN_HASH = sha256('1234');

@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { Product, Transaction, HeldCart, ReceiptSettings, AuditLog, SecuritySettings } from '../types';
-import { DEFAULT_OWNER_PIN_HASH } from '../utils/hash';
+import { DEFAULT_OWNER_PIN_HASH, DEFAULT_CASHIER_PIN_HASH } from '../utils/hash';
 
 export class KasirDatabase extends Dexie {
   products!: Table<Product, number>;
@@ -31,6 +31,8 @@ export const db = new KasirDatabase();
 
 export const defaultSecuritySettings: SecuritySettings = {
   ownerPinHash: DEFAULT_OWNER_PIN_HASH,
+  cashierPinHash: DEFAULT_CASHIER_PIN_HASH,
+  requireCashierPin: true,
   cashierCanAddMenu: true,
   cashierCanEditMenu: false,
   cashierCanViewReports: false,

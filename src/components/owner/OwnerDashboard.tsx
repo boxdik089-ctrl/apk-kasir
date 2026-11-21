@@ -47,6 +47,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinMsg, setPinMsg] = useState<string | null>(null);
+  const [newCashierPin, setNewCashierPin] = useState('');
+  const [cashierPinMsg, setCashierPinMsg] = useState<string | null>(null);
 
   const security: SecuritySettings = {
     ...defaultSecuritySettings,
@@ -158,7 +160,23 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     });
   };
 
-  const alertActions = new Set(['VOID_TRANSACTION', 'DELETE_HELD_CART', 'OWNER_LOGIN_FAILED', 'DB_RESTORED']);
+  const handleChangeCashierPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newCashierPin.length < 4 || newCashierPin.length > 8) {
+      setCashierPinMsg('PIN Kasir harus 4 hingga 8 digit angka.');
+      return;
+    }
+    const res = await SyncService.updateSettings(settings, ownerPin, undefined, newCashierPin);
+    if (res.ok) {
+      setNewCashierPin('');
+      setCashierPinMsg('PIN Kasir berhasil diperbarui.');
+      setTimeout(() => setCashierPinMsg(null), 4000);
+    } else {
+      setCashierPinMsg(res.error || 'Gagal mengganti PIN Kasir.');
+    }
+  };
+
+  const alertActions = new Set(['VOID_TRANSACTION', 'DELETE_HELD_CART', 'OWNER_LOGIN_FAILED', 'CASHIER_LOGIN_FAILED', 'DB_RESTORED']);
   const visibleLogs = auditFilter === 'ALERT' ? auditLogs.filter((l) => alertActions.has(l.action)) : auditLogs;
 
   const currentPort = window.location.port || '5173';
@@ -537,6 +555,31 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               >
                 Simpan PIN Owner Baru
               </button>
+
+              <div className="pt-3 border-t border-[#EAE3D7] space-y-2">
+                <div className="text-[11px] font-bold text-[#3D332B]">Ganti PIN Login Kasir</div>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={8}
+                    value={newCashierPin}
+                    onChange={(e) => setNewCashierPin(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="PIN Kasir baru (4-8 angka)"
+                    className="flex-1 px-3 py-1.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-xs text-[#1F1A17]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChangeCashierPin}
+                    className="px-3 py-1.5 bg-[#EFE9DF] hover:bg-[#E5DDD0] text-[#1F1A17] text-xs font-bold rounded-lg border border-[#D5C9B8]"
+                  >
+                    Simpan
+                  </button>
+                </div>
+                {cashierPinMsg && (
+                  <div className="text-[11px] font-semibold text-[#285A3B]">{cashierPinMsg}</div>
+                )}
+              </div>
             </form>
           </div>
 

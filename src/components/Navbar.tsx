@@ -12,7 +12,8 @@ import {
   Square, 
   X, 
   Maximize2, 
-  Minimize2 
+  Minimize2,
+  LogOut
 } from 'lucide-react';
 import type { ReceiptSettings, UserRole } from '../types';
 
@@ -23,9 +24,11 @@ interface NavbarProps {
   onSelectTab: (tab: AppTab) => void;
   settings: ReceiptSettings;
   userRole: UserRole;
+  activeUserName: string;
   isSyncOnline: boolean;
   onRequestOwnerLogin: () => void;
   onLockToCashier: () => void;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -33,9 +36,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectTab,
   settings,
   userRole,
+  activeUserName,
   isSyncOnline,
   onRequestOwnerLogin,
-  onLockToCashier
+  onLockToCashier,
+  onLogout
 }) => {
   const [timeStr, setTimeStr] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -151,9 +156,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Masuk dengan PIN khusus Owner"
             >
               <Lock className="w-3.5 h-3.5" />
-              <span>Masuk Owner</span>
+              <span className="hidden sm:inline">{activeUserName} • </span>
+              <span>Owner</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex items-center gap-1 px-2 py-1.5 bg-[#FAF8F5] hover:bg-[#FBEAE8] text-[#6D6055] hover:text-[#9A3B3B] border border-[#E5DDD0] rounded-lg text-[11px] sm:text-xs font-semibold transition-colors active:scale-[0.98]"
+            title="Keluar ke halaman login"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Keluar</span>
+          </button>
 
           <span className="text-xs font-mono text-[#7D6F63] tabular-nums hidden lg:inline pl-1">
             {timeStr}

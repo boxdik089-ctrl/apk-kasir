@@ -108,6 +108,7 @@ function sha256(str) {
 }
 
 const DEFAULT_PIN_HASH = sha256('123456');
+const DEFAULT_CASHIER_PIN_HASH = sha256('1234');
 
 const defaultStore = {
   revision: 1,
@@ -144,6 +145,8 @@ const defaultStore = {
     serialBaudRate: 9600,
     security: {
       ownerPinHash: DEFAULT_PIN_HASH,
+      cashierPinHash: DEFAULT_CASHIER_PIN_HASH,
+      requireCashierPin: true,
       cashierCanAddMenu: true,
       cashierCanEditMenu: false,
       cashierCanViewReports: false,
@@ -233,6 +236,13 @@ function getLanUrls() {
 function verifyOwnerPin(pin) {
   if (!pin) return false;
   const targetHash = store.settings?.security?.ownerPinHash || DEFAULT_PIN_HASH;
+  return sha256(pin) === targetHash;
+}
+
+function verifyCashierPin(pin) {
+  if (store.settings?.security?.requireCashierPin === false) return true;
+  if (!pin) return false;
+  const targetHash = store.settings?.security?.cashierPinHash || DEFAULT_CASHIER_PIN_HASH;
   return sha256(pin) === targetHash;
 }
 
@@ -395,6 +405,22 @@ const server = http.createServer(async (req, res) => {
         appendAudit(body.actor || 'Tidak Dikenal', 'CASHIER', 'OWNER_LOGIN_FAILED', `Percobaan PIN Owner gagal dari ${body.device || 'perangkat'}`);
         persistStore();
         return sendJson(res, 401, { ok: false, error: 'PIN Owner salah.' });
+      }
+    }
+
+    // 5b. Verify Cashier Login
+    if (req.method === 'POST' && pathname === '/api/cashier/verify') {
+      const body = await readJsonBody(req);
+      const cashierName = String(body.cashierName || '').trim() || 'Kasir';
+      const ok = verifyCashierPin(body.pin);
+      if (ok) {
+        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN', `Kasir ${cashierName} masuk shift dari ${body.device || 'perangkat'}`);
+        persistStore();
+        return sendJson(res, 200, { ok: true, cashierName });
+      } else {
+        appendAudit(cashierName, 'CASHIER', 'CASHIER_LOGIN_FAILED', `Percobaan PIN Kasir gagal atas nama ${cashierName} (${body.device || 'perangkat'})`);
+        persistStore();
+        return sendJson(res, 401, { ok: false, error: 'PIN Kasir salah.' });
       }
     }
 
@@ -610,6 +636,12 @@ const server = http.createServer(async (req, res) => {
         nextSettings.security = {
           ...(nextSettings.security || {}),
           ownerPinHash: sha256(String(body.newOwnerPin))
+        };
+      }
+      if (body.newCashierPin && String(body.newCashierPin).length >= 4) {
+        nextSettings.security = {
+          ...(nextSettings.security || {}),
+          cashierPinHash: sha256(String(body.newCashierPin))
         };
       }
       const prevLock = !!store.settings?.security?.terminalLocked;
