@@ -18,7 +18,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginSuccess
 }) => {
   const [role, setRole] = useState<UserRole>(defaultMode);
-  const [cashierName, setCashierName] = useState('Barista 01');
+  const [cashierName, setCashierName] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -180,36 +180,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           )}
 
           {role === 'CASHIER' && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="block text-xs font-bold text-[#3D332B]">
-                Nama Kasir / Barista
+                Nama Kasir
               </label>
               <input
                 type="text"
+                autoFocus
                 value={cashierName}
                 onChange={(e) => {
                   setCashierName(e.target.value);
                   setError(null);
                 }}
-                placeholder="Masukkan nama kasir..."
-                className="w-full px-3.5 py-2 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-sm font-semibold text-[#1F1A17] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2A211B]"
+                placeholder="Ketik nama kasir..."
+                className="w-full px-3.5 py-2.5 bg-[#F2ECE2] border border-[#D5C9B8] rounded-lg text-sm font-semibold text-[#1F1A17] placeholder-[#9C8E80] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2A211B]"
               />
-              <div className="flex flex-wrap gap-1.5">
-                {['Barista 01', 'Kasir Pagi', 'Kasir Sore'].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setCashierName(preset)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
-                      cashierName === preset
-                        ? 'bg-[#2A211B] text-[#FAF8F5] border-[#2A211B]'
-                        : 'bg-[#EFE9DF] text-[#5E5248] border-[#E2D9CC] hover:bg-[#E5DDD0]'
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
 

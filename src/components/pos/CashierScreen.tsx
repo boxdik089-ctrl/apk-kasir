@@ -35,7 +35,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   settings,
   userRole,
   ownerPin,
-  initialCashierName = 'Barista 01',
+  initialCashierName = 'Kasir',
   onRefreshProducts
 }) => {
   const [cart, setCart] = useState<CartItem[]>([]);

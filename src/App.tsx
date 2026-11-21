@@ -23,7 +23,7 @@ export function App() {
   // Authentication & Role state (always opens LoginScreen on initial app load)
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('CASHIER');
-  const [activeUserName, setActiveUserName] = useState<string>('Barista 01');
+  const [activeUserName, setActiveUserName] = useState<string>('Kasir');
   const [ownerPin, setOwnerPin] = useState<string>('');
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pendingTab, setPendingTab] = useState<AppTab | null>(null);
@@ -92,7 +92,7 @@ export function App() {
     setUserRole('CASHIER');
     setOwnerPin('');
     if (activeUserName === 'Owner') {
-      setActiveUserName('Barista 01');
+      setActiveUserName('Kasir');
     }
     if (currentTab === 'owner' || currentTab === 'receipt') {
       setCurrentTab('pos');
