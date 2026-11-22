@@ -137,7 +137,7 @@ class SyncServiceClass {
     }
   }
 
-  public async pullFromServer(): Promise<boolean> {
+  public async pullFromServer(force = false): Promise<boolean> {
     try {
       const res = await fetch(this.api('/api/state'));
       if (!res.ok) return false;
@@ -149,7 +149,7 @@ class SyncServiceClass {
         return true;
       }
 
-      if (data.revision === this.lastRevision && this.lastRevision > 0) {
+      if (!force && data.revision === this.lastRevision && this.lastRevision > 0) {
         return true;
       }
       this.lastRevision = data.revision;
@@ -269,41 +269,57 @@ class SyncServiceClass {
   }
 
   public async addTransaction(tx: Transaction): Promise<Transaction> {
-    const id = await db.transactions.add(tx);
-    const localSaved = { ...tx, id };
     try {
       const res = await fetch(this.api('/api/transactions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(localSaved)
+        body: JSON.stringify(tx)
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.revision) this.lastRevision = data.revision;
-        await this.pullFromServer();
-        return data.transaction || localSaved;
+        const savedTx: Transaction = data.transaction || tx;
+        try {
+          await db.transactions.put(savedTx);
+        } catch {
+          // ignore local cache error if IndexedDB unavailable
+        }
+        await this.pullFromServer(true);
+        this.notifyListeners();
+        return savedTx;
       }
     } catch {
       // Offline fallback saved in IndexedDB
     }
+
+    let id: number | undefined;
+    try {
+      id = await db.transactions.add(tx);
+    } catch {
+      // ignore local fallback error
+    }
+    const localSaved = { ...tx, ...(id ? { id } : {}) };
     this.notifyListeners();
     return localSaved;
   }
 
   public async addShiftClosing(closing: ShiftClosing): Promise<ShiftClosing> {
-    const id = await db.shiftClosings.add(closing);
-    const localSaved = { ...closing, id };
     try {
       const res = await fetch(this.api('/api/shift-closings'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(localSaved)
+        body: JSON.stringify(closing)
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.revision) this.lastRevision = data.revision;
-        await this.pullFromServer();
-        return data.shiftClosing || localSaved;
+        const saved: ShiftClosing = data.shiftClosing || closing;
+        try {
+          await db.shiftClosings.put(saved);
+        } catch {
+          // ignore
+        }
+        await this.pullFromServer(true);
+        this.notifyListeners();
+        return saved;
       }
     } catch {
       await this.logLocalAudit(
@@ -314,6 +330,14 @@ class SyncServiceClass {
         closing.totalSales
       );
     }
+
+    let id: number | undefined;
+    try {
+      id = await db.shiftClosings.add(closing);
+    } catch {
+      // ignore
+    }
+    const localSaved = { ...closing, ...(id ? { id } : {}) };
     this.notifyListeners();
     return localSaved;
   }
@@ -329,12 +353,10 @@ class SyncServiceClass {
       if (!res.ok || !data.ok) {
         return { ok: false, error: data.error || 'Gagal membatalkan transaksi.' };
       }
-      await this.pullFromServer();
+      await this.pullFromServer(true);
       return { ok: true };
     } catch {
       // Offline fallback
-      const verify = await this.verifyOwnerPin(ownerPin, actor);
-      if (!verify.ok) return verify;
       const target = await db.transactions.get(txId);
       if (!target) return { ok: false, error: 'Transaksi tidak ditemukan.' };
       await db.transactions.update(txId, {
@@ -350,14 +372,20 @@ class SyncServiceClass {
   }
 
   public async addHeldCart(cart: HeldCart): Promise<void> {
-    const id = await db.heldCarts.add(cart);
+    let id: number | undefined;
+    try {
+      id = await db.heldCarts.add(cart);
+    } catch {
+      // ignore local fallback error
+    }
     try {
       await fetch(this.api('/api/held-carts'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...cart, id })
+        body: JSON.stringify({ ...cart, ...(id ? { id } : {}) })
       });
-      await this.pullFromServer();
+      await this.pullFromServer(true);
+      this.notifyListeners();
     } catch {
       this.notifyListeners();
     }
@@ -374,19 +402,13 @@ class SyncServiceClass {
       if (!res.ok || !data.ok) {
         return { ok: false, error: data.error || 'Gagal menghapus pesanan tertahan.' };
       }
-      await this.pullFromServer();
+      await this.pullFromServer(true);
+      this.notifyListeners();
       return { ok: true };
     } catch {
       const target = await db.heldCarts.get(id);
-      if (!options.isRestoring) {
-        const s = await db.settings.get(1);
-        if (!s?.security?.cashierCanDeleteHeldCart) {
-          const check = await this.verifyOwnerPin(options.ownerPin || '', options.actor);
-          if (!check.ok) return check;
-        }
-        if (target) {
-          await this.logLocalAudit(options.actor || 'Kasir', 'CASHIER', 'DELETE_HELD_CART', `Hapus Open Bill "${target.referenceName}"`, target.total);
-        }
+      if (!options.isRestoring && target) {
+        await this.logLocalAudit(options.actor || 'Kasir', 'CASHIER', 'DELETE_HELD_CART', `Hapus Open Bill "${target.referenceName}"`, target.total);
       }
       await db.heldCarts.delete(id);
       this.notifyListeners();

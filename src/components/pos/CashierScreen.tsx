@@ -745,9 +745,9 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
               disabled={cart.length === 0}
               onClick={handleHoldCart}
               className="py-2.5 px-2 bg-[#EFE9DF] hover:bg-[#E5DDD0] text-[#3D332B] text-xs font-bold rounded-lg border border-[#DDD3C5] transition-colors disabled:opacity-40 active:scale-[0.98]"
-              title="Simpan pesanan sementara (F7)"
+              title="Tahan pesanan meja sementara yang belum dibayar (F7)"
             >
-              Tahan (F7)
+              Open Bill (F7)
             </button>
 
             <button

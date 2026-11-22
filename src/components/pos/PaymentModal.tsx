@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  Printer, 
-  Check, 
-  Wallet, 
-  QrCode, 
-  CreditCard, 
-  Building2, 
-  BookOpen, 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  X,
+  Printer,
+  Check,
+  Wallet,
+  QrCode,
+  CreditCard,
+  Building2,
+  BookOpen,
   ArrowRight
 } from 'lucide-react';
 import type { CartItem, PaymentMethod, Transaction, ReceiptSettings, CashierShift } from '../../types';
@@ -49,45 +49,60 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [customerName, setCustomerName] = useState<string>(initialCustomerName);
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
   const [completedTx, setCompletedTx] = useState<Transaction | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
   const [printFeedback, setPrintFeedback] = useState<string | null>(null);
+  const [lockedTotal, setLockedTotal] = useState<number>(total);
+  const wasOpenRef = useRef(false);
 
-  const numericPaid = parseFloat(paidInput.replace(/[^0-9]/g, '')) || 0;
-  const changeAmount = Math.max(0, numericPaid - total);
-  const isPayDisabled = paymentMethod === 'CASH' && numericPaid < total;
-
+  // Only reset form state when modal transitions from closed -> open
   useEffect(() => {
-    if (isOpen) {
-      setPaidInput(paymentMethod === 'CASH' ? '' : total.toString());
+    if (isOpen && !wasOpenRef.current) {
+      setPaymentMethod('CASH');
+      setLockedTotal(total);
+      setPaidInput(total > 0 ? String(total) : '');
       setCustomerName(initialCustomerName);
       setIsCompleted(false);
       setCompletedTx(null);
+      setIsSaving(false);
+      setIsPrinting(false);
       setPrintFeedback(null);
     }
-  }, [isOpen, total, paymentMethod, initialCustomerName]);
+    wasOpenRef.current = isOpen;
+  }, [isOpen, total, initialCustomerName]);
 
   if (!isOpen) return null;
 
-  // Quick cash amount presets
+  const activeTotal = isCompleted && completedTx ? completedTx.total : lockedTotal;
+  const numericPaid = parseFloat(paidInput.replace(/[^0-9]/g, '')) || 0;
+  const changeAmount = Math.max(0, numericPaid - activeTotal);
+  const isPayDisabled = isSaving || (paymentMethod === 'CASH' && numericPaid < activeTotal);
+
   const quickCashOptions = [
-    { label: 'Uang Pas', amount: total },
+    { label: 'Uang Pas', amount: activeTotal },
     { label: 'Rp 20.000', amount: 20000 },
     { label: 'Rp 50.000', amount: 50000 },
     { label: 'Rp 100.000', amount: 100000 },
     { label: 'Rp 150.000', amount: 150000 },
     { label: 'Rp 200.000', amount: 200000 }
-  ].filter(opt => opt.amount >= total || opt.label === 'Uang Pas');
+  ].filter((opt) => opt.amount >= activeTotal || opt.label === 'Uang Pas');
 
-  // Trigger Transaction Completion
   const handleProcessPayment = async (shouldPrint: boolean) => {
-    const finalPaid = paymentMethod === 'CASH' ? numericPaid : total;
-    const finalChange = paymentMethod === 'CASH' ? changeAmount : 0;
+    if (isSaving) return;
+    const finalPaid = paymentMethod === 'CASH' ? numericPaid : activeTotal;
+    if (paymentMethod === 'CASH' && finalPaid < activeTotal) {
+      alert('Nominal uang diterima masih kurang dari total tagihan.');
+      return;
+    }
 
-    const invoiceNumber = `INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+    setIsSaving(true);
+    const finalChange = paymentMethod === 'CASH' ? Math.max(0, finalPaid - activeTotal) : 0;
+    const now = new Date();
+    const invoiceNumber = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
 
     const newTransaction: Transaction = {
       invoiceNumber,
-      timestamp: new Date().toISOString(),
+      timestamp: now.toISOString(),
       cashierName: cashierName || 'Kasir',
       shift: activeShift,
       customerName: customerName.trim() || undefined,
@@ -95,7 +110,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       subtotal,
       discount,
       tax,
-      total,
+      total: activeTotal,
       paidAmount: finalPaid,
       changeAmount: finalChange,
       paymentMethod,
@@ -103,37 +118,38 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     };
 
     try {
-      // Save Transaction & Sync to Owner Dashboard
       const savedTx = await SyncService.addTransaction(newTransaction);
 
       setCompletedTx(savedTx);
       setIsCompleted(true);
+      onTransactionComplete(savedTx);
 
-      // Print if requested or auto-print is active
+      // Wait briefly so #printable-receipt mounts into DOM before printing
       if (shouldPrint || settings.autoPrintOnPayment) {
         setIsPrinting(true);
-        try {
-          const res = await PrinterService.print(
-            'printable-receipt',
-            savedTx,
-            settings
-          );
-          setPrintFeedback(res.message);
-        } catch (printErr: any) {
-          setPrintFeedback('Gagal cetak: ' + (printErr.message || printErr));
-        } finally {
-          setIsPrinting(false);
-        }
+        setTimeout(async () => {
+          try {
+            const res = await PrinterService.print(
+              'printable-receipt',
+              savedTx,
+              settings
+            );
+            setPrintFeedback(res.message);
+          } catch (printErr: any) {
+            setPrintFeedback('Gagal cetak: ' + (printErr?.message || printErr));
+          } finally {
+            setIsPrinting(false);
+          }
+        }, 80);
       }
-
-      onTransactionComplete(savedTx);
     } catch (err) {
       console.error('Payment processing error:', err);
       alert('Gagal memproses transaksi.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Re-print button on success screen
   const handleManualPrint = async () => {
     if (!completedTx) return;
     setIsPrinting(true);
@@ -145,7 +161,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       );
       setPrintFeedback(res.message);
     } catch (err: any) {
-      setPrintFeedback('Gagal cetak: ' + (err.message || err));
+      setPrintFeedback('Gagal cetak: ' + (err?.message || err));
     } finally {
       setIsPrinting(false);
     }
@@ -153,9 +169,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-[#26201C]/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-[#FAF8F5] border border-[#E8E1D7] rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col animate-pop-in">
+      <div className="bg-[#FAF8F5] border border-[#E8E1D7] rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-pop-in">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-[#E8E1D7] flex items-center justify-between bg-[#F5F2EB]/90">
+        <div className="px-6 py-4 border-b border-[#E8E1D7] flex items-center justify-between bg-[#F5F2EB]/90 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-[#EDE6DC] text-[#7A4B1A] flex items-center justify-center">
               <Wallet className="w-4 h-4" />
@@ -165,11 +181,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 {isCompleted ? 'Pembayaran Berhasil' : 'Kasir Pembayaran'}
               </h2>
               <p className="text-[11px] text-[#786C61]">
-                {isCompleted ? 'Pesanan siap disajikan ke meja pelanggan' : 'Selesaikan transaksi pesanan cafe'}
+                {isCompleted
+                  ? 'Transaksi sudah tersimpan ke Riwayat & Laporan'
+                  : 'Selesaikan transaksi & simpan ke laporan'}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="text-[#8A7D71] hover:text-[#26201C] p-1.5 rounded-xl hover:bg-[#EDE6DC] transition active:scale-95"
           >
@@ -178,7 +197,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto">
+        <div className="p-6 overflow-y-auto flex-1">
           {!isCompleted ? (
             <div className="space-y-5">
               {/* Total Display Banner */}
@@ -187,8 +206,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   <span className="text-[11px] uppercase tracking-wider text-[#786C61] font-bold">
                     Total Tagihan Pesanan
                   </span>
-                  <div className="text-2xl font-black text-[#26201C] mt-0.5 tracking-tight">
-                    {PrinterService.formatRupiah(total)}
+                  <div className="text-2xl font-black text-[#26201C] mt-0.5 tracking-tight tabular-nums">
+                    {PrinterService.formatRupiah(activeTotal)}
                   </div>
                 </div>
                 <div className="text-right text-xs text-[#786C61]">
@@ -218,9 +237,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         type="button"
                         onClick={() => {
                           setPaymentMethod(m.id as PaymentMethod);
-                          if (m.id !== 'CASH') {
-                            setPaidInput(total.toString());
-                          }
+                          setPaidInput(String(activeTotal));
                         }}
                         className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-xs font-bold transition-all active:scale-95 ${
                           isSelected
@@ -240,9 +257,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               {paymentMethod === 'CASH' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-[#3D322A] mb-1.5">
-                      Nominal Uang Diterima:
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-[#3D322A]">
+                        Nominal Uang Diterima:
+                      </label>
+                      {paidInput && (
+                        <button
+                          type="button"
+                          onClick={() => setPaidInput('')}
+                          className="text-[11px] font-semibold text-[#7A4B1A] hover:underline"
+                        >
+                          Kosongkan
+                        </button>
+                      )}
+                    </div>
                     <div className="relative">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8A7D71] font-bold text-base">
                         Rp
@@ -250,13 +278,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       <input
                         type="text"
                         autoFocus
+                        onFocus={(e) => e.target.select()}
                         value={paidInput ? Number(paidInput).toLocaleString('id-ID') : ''}
                         onChange={(e) => {
                           const raw = e.target.value.replace(/[^0-9]/g, '');
                           setPaidInput(raw);
                         }}
                         placeholder="0"
-                        className="w-full pl-12 pr-4 py-3 bg-[#F5F2EB] border border-[#D5C9B8] rounded-2xl text-xl font-bold text-[#26201C] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2D241E] focus:ring-2 focus:ring-[#2D241E]/10 transition"
+                        className="w-full pl-12 pr-4 py-3 bg-[#F5F2EB] border border-[#D5C9B8] rounded-2xl text-xl font-bold text-[#26201C] focus:outline-none focus:bg-[#FAF8F5] focus:border-[#2D241E] focus:ring-2 focus:ring-[#2D241E]/10 transition tabular-nums"
                       />
                     </div>
                   </div>
@@ -267,8 +296,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       <button
                         key={idx}
                         type="button"
-                        onClick={() => setPaidInput(opt.amount.toString())}
-                        className="px-3 py-1.5 bg-[#EDE6DC] hover:bg-[#E2D8C9] active:scale-95 text-[#3D322A] text-xs font-semibold rounded-xl border border-[#DFD5C6] transition-all"
+                        onClick={() => setPaidInput(String(opt.amount))}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all active:scale-95 ${
+                          numericPaid === opt.amount
+                            ? 'bg-[#2A211B] text-[#FAF8F5] border-[#2A211B]'
+                            : 'bg-[#EDE6DC] hover:bg-[#E2D8C9] text-[#3D322A] border-[#DFD5C6]'
+                        }`}
                       >
                         {opt.label}
                       </button>
@@ -279,16 +312,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   <div className="p-3.5 bg-[#F5F2EB] border border-[#E8E1D7] rounded-2xl flex items-center justify-between">
                     <span className="text-xs font-bold text-[#786C61]">Kembalian:</span>
                     <span
-                      className={`text-xl font-black ${
+                      className={`text-xl font-black tabular-nums ${
                         changeAmount > 0
                           ? 'text-[#285A3B]'
-                          : numericPaid >= total
+                          : numericPaid >= activeTotal
                           ? 'text-[#26201C]'
                           : 'text-[#9A3B3B]'
                       }`}
                     >
-                      {numericPaid < total && numericPaid > 0
-                        ? `Kurang ${PrinterService.formatRupiah(total - numericPaid)}`
+                      {numericPaid < activeTotal
+                        ? `Kurang ${PrinterService.formatRupiah(activeTotal - numericPaid)}`
                         : PrinterService.formatRupiah(changeAmount)}
                     </span>
                   </div>
@@ -311,13 +344,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           ) : (
             /* Success State */
-            <div className="text-center py-4 space-y-4 animate-pop-in">
+            <div className="text-center py-3 space-y-4 animate-pop-in">
               <div className="w-14 h-14 bg-[#EAF3EC] text-[#285A3B] rounded-full flex items-center justify-center mx-auto shadow-xs">
                 <Check className="w-7 h-7 stroke-[3]" />
               </div>
 
               <div>
-                <h3 className="text-base font-bold text-[#26201C]">Pesanan Berhasil Dicatat</h3>
+                <h3 className="text-base font-bold text-[#26201C]">
+                  Pembayaran Tersimpan di Laporan
+                </h3>
                 <p className="text-xs text-[#786C61] mt-0.5 font-mono">
                   {completedTx?.invoiceNumber}
                 </p>
@@ -327,19 +362,19 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <div className="p-4 bg-[#F5F2EB] rounded-2xl border border-[#E8E1D7] max-w-sm mx-auto text-xs space-y-2 text-left">
                   <div className="flex justify-between text-[#5C4F45]">
                     <span>Total Tagihan:</span>
-                    <span className="text-[#26201C] font-bold">
+                    <span className="text-[#26201C] font-bold tabular-nums">
                       {PrinterService.formatRupiah(completedTx.total)}
                     </span>
                   </div>
                   <div className="flex justify-between text-[#5C4F45]">
                     <span>Bayar ({completedTx.paymentMethod}):</span>
-                    <span className="text-[#26201C] font-bold">
+                    <span className="text-[#26201C] font-bold tabular-nums">
                       {PrinterService.formatRupiah(completedTx.paidAmount)}
                     </span>
                   </div>
                   <div className="flex justify-between text-[#5C4F45] pt-2 border-t border-[#E8E1D7]">
                     <span className="font-bold text-[#285A3B]">Kembalian:</span>
-                    <span className="text-[#285A3B] font-black text-base">
+                    <span className="text-[#285A3B] font-black text-base tabular-nums">
                       {PrinterService.formatRupiah(completedTx.changeAmount)}
                     </span>
                   </div>
@@ -385,7 +420,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
         {/* Modal Footer (When not completed) */}
         {!isCompleted && (
-          <div className="px-6 py-4 border-t border-[#E8E1D7] bg-[#F5F2EB]/90 flex items-center justify-end gap-2.5">
+          <div className="px-6 py-4 border-t border-[#E8E1D7] bg-[#F5F2EB]/90 flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -400,7 +435,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               onClick={() => handleProcessPayment(false)}
               className="px-4 py-2.5 bg-[#EDE6DC] hover:bg-[#E2D8C9] active:scale-95 text-[#3D322A] text-xs font-bold rounded-xl border border-[#DFD5C6] transition-all disabled:opacity-40"
             >
-              Bayar Tanpa Struk
+              {isSaving ? 'Menyimpan...' : 'Bayar Tanpa Struk'}
             </button>
 
             <button
@@ -410,7 +445,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               className="flex items-center gap-1.5 px-5 py-2.5 bg-[#285A3B] hover:bg-[#1E442C] active:scale-95 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-40"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Bayar & Cetak</span>
+              <span>{isSaving ? 'Menyimpan...' : 'Bayar & Cetak'}</span>
             </button>
           </div>
         )}

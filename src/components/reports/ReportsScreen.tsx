@@ -53,6 +53,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   };
 
   useEffect(() => {
+    SyncService.pullFromServer(true).catch(() => {});
     loadTransactions();
     const unsubscribe = SyncService.subscribe(() => {
       loadTransactions();
