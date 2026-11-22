@@ -11,12 +11,14 @@ import {
   KeyRound,
   RefreshCw,
   Globe,
-  MonitorSmartphone
+  MonitorSmartphone,
+  Calculator
 } from 'lucide-react';
-import type { AuditLog, ReceiptSettings, SecuritySettings, Transaction } from '../../types';
+import type { AuditLog, ReceiptSettings, SecuritySettings, ShiftClosing, Transaction } from '../../types';
 import { defaultSecuritySettings, db } from '../../db/db';
 import { PrinterService } from '../../services/printerService';
 import { SyncService, type SyncHealthInfo, type RemoteTunnelStatus } from '../../services/syncService';
+import { ShiftClosingModal } from '../pos/ShiftClosingModal';
 
 interface OwnerDashboardProps {
   settings: ReceiptSettings;
@@ -36,12 +38,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [health, setHealth] = useState<SyncHealthInfo | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [shiftClosings, setShiftClosings] = useState<ShiftClosing[]>([]);
   const [auditFilter, setAuditFilter] = useState<'ALL' | 'ALERT'>('ALL');
-  const [mobileSection, setMobileSection] = useState<'KONTROL' | 'AUDIT' | 'REMOTE'>('KONTROL');
+  const [mobileSection, setMobileSection] = useState<'KONTROL' | 'AUDIT' | 'REMOTE'>('REMOTE');
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [tunnel, setTunnel] = useState<RemoteTunnelStatus>({ status: 'idle', url: null, ownerUrl: null });
   const [isTogglingTunnel, setIsTogglingTunnel] = useState(false);
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
 
   const [newOwnerPw, setNewOwnerPw] = useState('');
   const [ownerPwMsg, setOwnerPwMsg] = useState<string | null>(null);
@@ -54,14 +58,16 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   };
 
   const loadMonitoringData = async () => {
-    const [txList, logs, serverHealth, tunnelInfo] = await Promise.all([
+    const [txList, logs, closings, serverHealth, tunnelInfo] = await Promise.all([
       db.transactions.reverse().toArray(),
       db.auditLogs.reverse().toArray(),
+      db.shiftClosings.reverse().toArray(),
       SyncService.checkHealth(),
       SyncService.getRemoteTunnelStatus()
     ]);
     setTransactions(txList);
     setAuditLogs(logs);
+    setShiftClosings(closings);
     setHealth(serverHealth);
     setTunnel(tunnelInfo);
   };
@@ -116,6 +122,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const shiftSiangTx = todayCompleted.filter((t) => getTxShift(t) === 'Shift Siang');
   const shiftPagiRevenue = shiftPagiTx.reduce((sum, t) => sum + t.total, 0);
   const shiftSiangRevenue = shiftSiangTx.reduce((sum, t) => sum + t.total, 0);
+
+  const isToday = (iso: string) => {
+    const d = new Date(iso);
+    return (
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear()
+    );
+  };
+  const todayShiftPagiClosing = shiftClosings.find((c) => c.shift === 'Shift Pagi' && isToday(c.closedAt));
+  const todayShiftSiangClosing = shiftClosings.find((c) => c.shift === 'Shift Siang' && isToday(c.closedAt));
 
   const handleToggleSecurity = async (field: keyof SecuritySettings, value: boolean) => {
     const updatedSettings: ReceiptSettings = {
@@ -208,6 +225,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               {health?.ok ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
               <span>{health?.ok ? 'Sync Aktif' : 'Offline'}</span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsShiftModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#FAF8F5] hover:bg-[#EFE9DF] text-[#1F1A17] text-xs font-bold rounded-lg border border-[#D5C9B8] transition-colors"
+            >
+              <Calculator className="w-3.5 h-3.5 text-[#7A4B1A]" />
+              <span>Rekap Shift</span>
+            </button>
 
             <button
               type="button"
@@ -313,30 +339,64 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         </div>
 
         {/* Shift Pagi vs Shift Siang Breakdown */}
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-          <div className="p-3.5 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl flex items-center justify-between gap-2">
-            <div>
-              <div className="text-[11px] font-bold text-[#874C23]">Shift Pagi</div>
-              <div className="text-sm sm:text-lg font-extrabold text-[#1F1A17] tabular-nums mt-0.5">
-                {PrinterService.formatRupiah(shiftPagiRevenue)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+          {([
+            {
+              label: 'Shift Pagi',
+              revenue: shiftPagiRevenue,
+              txCount: shiftPagiTx.length,
+              closing: todayShiftPagiClosing,
+              accent: 'text-[#874C23]',
+              badgeBg: 'bg-[#EFE9DF] text-[#5E5248]'
+            },
+            {
+              label: 'Shift Siang',
+              revenue: shiftSiangRevenue,
+              txCount: shiftSiangTx.length,
+              closing: todayShiftSiangClosing,
+              accent: 'text-[#285A3B]',
+              badgeBg: 'bg-[#EAF3EC] text-[#285A3B]'
+            }
+          ] as const).map((card) => (
+            <div key={card.label} className="p-3.5 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className={`text-[11px] font-bold ${card.accent}`}>{card.label}</div>
+                  <div className="text-sm sm:text-lg font-extrabold text-[#1F1A17] tabular-nums mt-0.5">
+                    {PrinterService.formatRupiah(card.revenue)}
+                  </div>
+                </div>
+                <span className={`px-2 py-1 rounded-md text-[11px] font-semibold tabular-nums ${card.badgeBg}`}>
+                  {card.txCount} struk
+                </span>
               </div>
-            </div>
-            <span className="px-2 py-1 rounded-md bg-[#EFE9DF] text-[#5E5248] text-[11px] font-semibold tabular-nums">
-              {shiftPagiTx.length} struk
-            </span>
-          </div>
 
-          <div className="p-3.5 bg-[#FAF8F5] border border-[#E5DDD0] rounded-xl flex items-center justify-between gap-2">
-            <div>
-              <div className="text-[11px] font-bold text-[#285A3B]">Shift Siang</div>
-              <div className="text-sm sm:text-lg font-extrabold text-[#1F1A17] tabular-nums mt-0.5">
-                {PrinterService.formatRupiah(shiftSiangRevenue)}
-              </div>
+              {card.closing ? (
+                <div className="pt-2 border-t border-[#EFE9DF] flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                  <span className="text-[#285A3B] font-semibold">
+                    Tutup oleh {card.closing.cashierName} • Laci {PrinterService.formatRupiah(card.closing.expectedCashInDrawer)}
+                  </span>
+                  {typeof card.closing.cashDifference === 'number' && card.closing.actualCashInDrawer !== undefined && (
+                    <span
+                      className={`font-bold tabular-nums ${
+                        card.closing.cashDifference === 0 ? 'text-[#285A3B]' : 'text-[#9A3B3B]'
+                      }`}
+                    >
+                      {card.closing.cashDifference === 0
+                        ? 'Pas'
+                        : card.closing.cashDifference > 0
+                        ? `+${PrinterService.formatRupiah(card.closing.cashDifference)}`
+                        : `-${PrinterService.formatRupiah(Math.abs(card.closing.cashDifference))}`}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="pt-2 border-t border-[#EFE9DF] text-[11px] text-[#8C7E71]">
+                  Belum ada laporan tutup shift hari ini
+                </div>
+              )}
             </div>
-            <span className="px-2 py-1 rounded-md bg-[#EAF3EC] text-[#285A3B] text-[11px] font-semibold tabular-nums">
-              {shiftSiangTx.length} struk
-            </span>
-          </div>
+          ))}
         </div>
 
             {/* Mobile Section Switcher (Hidden on Desktop) */}
@@ -603,6 +663,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      <ShiftClosingModal
+        isOpen={isShiftModalOpen}
+        onClose={() => setIsShiftModalOpen(false)}
+        activeShift={new Date().getHours() < 14 ? 'Shift Pagi' : 'Shift Siang'}
+        cashierName="Owner"
+        settings={settings}
+        allowShiftToggle={true}
+      />
     </div>
   );
 };

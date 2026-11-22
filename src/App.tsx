@@ -202,6 +202,7 @@ export function App() {
                 activeShift={activeShift}
                 onRefreshProducts={loadLocalData}
                 onNavigateToSettings={() => handleSelectTab('printer')}
+                onSwitchShift={handleLogout}
               />
             )}
 
@@ -220,6 +221,8 @@ export function App() {
                 settings={settings}
                 userRole={userRole}
                 ownerPin={ownerPin}
+                activeShift={activeShift}
+                activeCashierName={activeUserName}
               />
             )}
 

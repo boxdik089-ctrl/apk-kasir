@@ -142,11 +142,14 @@
   }
 
   #printable-receipt,
-  #printable-receipt * {
+  #printable-receipt *,
+  #printable-shift-receipt,
+  #printable-shift-receipt * {
     visibility: visible !important;
   }
 
-  #printable-receipt {
+  #printable-receipt,
+  #printable-shift-receipt {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;

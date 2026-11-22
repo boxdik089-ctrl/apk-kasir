@@ -1,5 +1,15 @@
 import { db, defaultSettings, defaultSecuritySettings } from '../db/db';
-import type { Product, Transaction, HeldCart, ReceiptSettings, AuditLog, AuditAction, UserRole, CashierShift } from '../types';
+import type {
+  Product,
+  Transaction,
+  HeldCart,
+  ReceiptSettings,
+  AuditLog,
+  AuditAction,
+  UserRole,
+  CashierShift,
+  ShiftClosing
+} from '../types';
 import { sha256 } from '../utils/hash';
 
 export interface SyncHealthInfo {
@@ -109,17 +119,18 @@ class SyncServiceClass {
       const health = await this.checkHealth();
       if (!health || health.seeded) return;
 
-      const [products, transactions, heldCarts, settings] = await Promise.all([
+      const [products, transactions, heldCarts, settings, shiftClosings] = await Promise.all([
         db.products.toArray(),
         db.transactions.toArray(),
         db.heldCarts.toArray(),
-        db.settings.get(1)
+        db.settings.get(1),
+        db.shiftClosings.toArray()
       ]);
 
       await fetch(this.api('/api/seed'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products, transactions, heldCarts, settings })
+        body: JSON.stringify({ products, transactions, heldCarts, settings, shiftClosings })
       });
     } catch {
       // Offline mode continues cleanly
@@ -143,7 +154,10 @@ class SyncServiceClass {
       }
       this.lastRevision = data.revision;
 
-      await db.transaction('rw', [db.products, db.transactions, db.heldCarts, db.settings, db.auditLogs], async () => {
+      await db.transaction(
+        'rw',
+        [db.products, db.transactions, db.heldCarts, db.settings, db.auditLogs, db.shiftClosings],
+        async () => {
         if (Array.isArray(data.products)) {
           await db.products.clear();
           if (data.products.length > 0) await db.products.bulkPut(data.products);
@@ -159,6 +173,10 @@ class SyncServiceClass {
         if (Array.isArray(data.auditLogs)) {
           await db.auditLogs.clear();
           if (data.auditLogs.length > 0) await db.auditLogs.bulkPut(data.auditLogs);
+        }
+        if (Array.isArray(data.shiftClosings)) {
+          await db.shiftClosings.clear();
+          if (data.shiftClosings.length > 0) await db.shiftClosings.bulkPut(data.shiftClosings);
         }
         if (data.settings) {
           const merged: ReceiptSettings = {
@@ -267,6 +285,34 @@ class SyncServiceClass {
       }
     } catch {
       // Offline fallback saved in IndexedDB
+    }
+    this.notifyListeners();
+    return localSaved;
+  }
+
+  public async addShiftClosing(closing: ShiftClosing): Promise<ShiftClosing> {
+    const id = await db.shiftClosings.add(closing);
+    const localSaved = { ...closing, id };
+    try {
+      const res = await fetch(this.api('/api/shift-closings'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(localSaved)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.revision) this.lastRevision = data.revision;
+        await this.pullFromServer();
+        return data.shiftClosing || localSaved;
+      }
+    } catch {
+      await this.logLocalAudit(
+        closing.cashierName || 'Kasir',
+        'CASHIER',
+        'SHIFT_CLOSED',
+        `Tutup ${closing.shift} (Tunai Laci: Rp ${Number(closing.expectedCashInDrawer).toLocaleString('id-ID')})`,
+        closing.totalSales
+      );
     }
     this.notifyListeners();
     return localSaved;

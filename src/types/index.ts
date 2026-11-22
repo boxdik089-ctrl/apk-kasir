@@ -46,7 +46,29 @@ export type AuditAction =
   | 'MENU_CHANGED'
   | 'SETTINGS_CHANGED'
   | 'REMOTE_LOCK_CHANGED'
-  | 'DB_RESTORED';
+  | 'DB_RESTORED'
+  | 'SHIFT_CLOSED';
+
+export interface ShiftClosing {
+  id?: number;
+  closedAt: string;
+  shift: CashierShift;
+  cashierName: string;
+  openingCash: number;
+  cashSales: number;
+  qrisSales: number;
+  transferSales: number;
+  debitSales: number;
+  kasbonSales: number;
+  nonCashSales: number;
+  totalSales: number;
+  transactionCount: number;
+  voidCount: number;
+  expectedCashInDrawer: number;
+  actualCashInDrawer?: number;
+  cashDifference?: number;
+  notes?: string;
+}
 
 export interface AuditLog {
   id?: number;

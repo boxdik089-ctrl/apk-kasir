@@ -12,7 +12,8 @@ import {
   Check,
   Flame,
   Snowflake,
-  X
+  X,
+  Calculator
 } from 'lucide-react';
 import type { Product, ProductVariant, CartItem, ReceiptSettings, HeldCart, UserRole, CashierShift } from '../../types';
 import { PrinterService } from '../../services/printerService';
@@ -20,6 +21,7 @@ import { SyncService } from '../../services/syncService';
 import { PaymentModal } from './PaymentModal';
 import { HeldCartsModal } from './HeldCartsModal';
 import { ProductModal } from '../products/ProductModal';
+import { ShiftClosingModal } from './ShiftClosingModal';
 import { db } from '../../db/db';
 
 interface CashierScreenProps {
@@ -31,6 +33,7 @@ interface CashierScreenProps {
   activeShift?: CashierShift;
   onRefreshProducts: () => void;
   onNavigateToSettings: () => void;
+  onSwitchShift?: () => void;
 }
 
 export const CashierScreen: React.FC<CashierScreenProps> = ({
@@ -40,7 +43,8 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   ownerPin,
   initialCashierName = 'Kasir',
   activeShift = 'Shift Pagi',
-  onRefreshProducts
+  onRefreshProducts,
+  onSwitchShift
 }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,6 +67,7 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isHeldCartsOpen, setIsHeldCartsOpen] = useState(false);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const [isShiftClosingOpen, setIsShiftClosingOpen] = useState(false);
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
   
   // Search input ref
@@ -340,6 +345,17 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
               </button>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsShiftClosingOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#EFE9DF] hover:bg-[#E5DDD0] active:scale-[0.98] text-[#3D332B] text-xs font-bold rounded-lg border border-[#DDD3C5] transition-all whitespace-nowrap"
+            title="Hitung uang laci dan cetak struk tutup shift"
+          >
+            <Calculator className="w-3.5 h-3.5 text-[#7A4B1A]" />
+            <span className="hidden sm:inline">Tutup Shift</span>
+            <span className="sm:hidden">Shift</span>
+          </button>
 
           <button
             type="button"
@@ -862,6 +878,16 @@ export const CashierScreen: React.FC<CashierScreenProps> = ({
         onClose={() => setIsAddMenuOpen(false)}
         onSave={handleSaveNewMenu}
         categories={categories.filter((c) => c !== 'Semua')}
+      />
+
+      <ShiftClosingModal
+        isOpen={isShiftClosingOpen}
+        onClose={() => setIsShiftClosingOpen(false)}
+        activeShift={activeShift}
+        cashierName={cashierName}
+        settings={settings}
+        allowShiftToggle={true}
+        onSwitchShift={onSwitchShift}
       />
     </div>
   );

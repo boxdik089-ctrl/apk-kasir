@@ -6,10 +6,12 @@ import {
   Eye, 
   X, 
   Search, 
-  Award 
+  Award,
+  Calculator
 } from 'lucide-react';
 import type { Transaction, ReceiptSettings, UserRole, CashierShift } from '../../types';
 import { ReceiptView } from '../receipt/ReceiptView';
+import { ShiftClosingModal } from '../pos/ShiftClosingModal';
 import { PrinterService } from '../../services/printerService';
 import { SyncService } from '../../services/syncService';
 import { db } from '../../db/db';
@@ -18,9 +20,16 @@ interface ReportsScreenProps {
   settings: ReceiptSettings;
   userRole: UserRole;
   ownerPin: string;
+  activeShift?: CashierShift;
+  activeCashierName?: string;
 }
 
-export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole }) => {
+export const ReportsScreen: React.FC<ReportsScreenProps> = ({
+  settings,
+  userRole,
+  activeShift = 'Shift Pagi',
+  activeCashierName = 'Kasir'
+}) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [timeFilter, setTimeFilter] = useState<'today' | '7days' | 'month' | 'all'>('today');
   const [shiftFilter, setShiftFilter] = useState<'ALL' | CashierShift>('ALL');
@@ -32,6 +41,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
   const [isVoiding, setIsVoiding] = useState(false);
   const [isReprinting, setIsReprinting] = useState(false);
   const [reprintFeedback, setReprintFeedback] = useState<string | null>(null);
+  const [isShiftClosingOpen, setIsShiftClosingOpen] = useState(false);
 
   const loadTransactions = async () => {
     try {
@@ -208,14 +218,25 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleExportCSV}
-          className="flex items-center gap-1.5 px-3 py-2 bg-[#FAF8F5] hover:bg-[#EFE9DF] active:scale-[0.98] text-[#3D332B] text-xs font-semibold rounded-lg border border-[#E5DDD0] transition-colors"
-        >
-          <Download className="w-3.5 h-3.5 text-[#6D6055]" />
-          <span>Export CSV</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsShiftClosingOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#2A211B] hover:bg-[#1A1410] active:scale-[0.98] text-[#FAF8F5] text-xs font-bold rounded-lg transition-colors"
+          >
+            <Calculator className="w-3.5 h-3.5" />
+            <span>Rekap Tutup Shift</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#FAF8F5] hover:bg-[#EFE9DF] active:scale-[0.98] text-[#3D332B] text-xs font-semibold rounded-lg border border-[#E5DDD0] transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-[#6D6055]" />
+            <span>Export CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Time & Shift Filter Bar */}
@@ -630,6 +651,15 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ settings, userRole
           </form>
         </div>
       )}
+
+      <ShiftClosingModal
+        isOpen={isShiftClosingOpen}
+        onClose={() => setIsShiftClosingOpen(false)}
+        activeShift={shiftFilter !== 'ALL' ? shiftFilter : activeShift}
+        cashierName={userRole === 'OWNER' ? 'Owner' : activeCashierName}
+        settings={settings}
+        allowShiftToggle={true}
+      />
       </div>
     </div>
   );

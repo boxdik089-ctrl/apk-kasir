@@ -117,6 +117,7 @@ const defaultStore = {
   transactions: [],
   heldCarts: [],
   auditLogs: [],
+  shiftClosings: [],
   settings: {
     id: 1,
     storeName: 'SENJA COFFEE & EATERY',
@@ -173,6 +174,7 @@ function ensureStore() {
     if (!Array.isArray(parsed.transactions)) parsed.transactions = [];
     if (!Array.isArray(parsed.heldCarts)) parsed.heldCarts = [];
     if (!Array.isArray(parsed.auditLogs)) parsed.auditLogs = [];
+    if (!Array.isArray(parsed.shiftClosings)) parsed.shiftClosings = [];
     if (!parsed.revision) parsed.revision = 1;
     return parsed;
   } catch (err) {
@@ -359,7 +361,8 @@ const server = http.createServer(async (req, res) => {
         transactions: store.transactions,
         heldCarts: store.heldCarts,
         settings: store.settings,
-        auditLogs: store.auditLogs
+        auditLogs: store.auditLogs,
+        shiftClosings: store.shiftClosings
       });
     }
 
@@ -375,6 +378,9 @@ const server = http.createServer(async (req, res) => {
         }
         if (Array.isArray(body.heldCarts) && body.heldCarts.length > 0) {
           store.heldCarts = body.heldCarts;
+        }
+        if (Array.isArray(body.shiftClosings) && body.shiftClosings.length > 0) {
+          store.shiftClosings = body.shiftClosings;
         }
         if (body.settings) {
           store.settings = {
@@ -648,6 +654,38 @@ const server = http.createServer(async (req, res) => {
       appendAudit('Owner', 'OWNER', 'DB_RESTORED', 'Owner memulihkan database dari file backup JSON');
       persistStore();
       return sendJson(res, 200, { ok: true, revision: store.revision });
+    }
+
+    // 8b. Close Shift / Rekap Kas
+    if (req.method === 'POST' && pathname === '/api/shift-closings') {
+      const payload = await readJsonBody(req);
+      const nextId = store.shiftClosings.reduce((max, s) => Math.max(max, s.id || 0), 0) + 1;
+      const saved = {
+        ...payload,
+        id: nextId,
+        closedAt: payload.closedAt || new Date().toISOString()
+      };
+      store.shiftClosings.unshift(saved);
+      if (store.shiftClosings.length > 200) {
+        store.shiftClosings = store.shiftClosings.slice(0, 200);
+      }
+      const diffText =
+        typeof saved.cashDifference === 'number' && saved.actualCashInDrawer !== undefined
+          ? saved.cashDifference === 0
+            ? ' • Laci Pas'
+            : saved.cashDifference > 0
+            ? ` • Lebih Rp ${Number(saved.cashDifference).toLocaleString('id-ID')}`
+            : ` • Kurang Rp ${Number(Math.abs(saved.cashDifference)).toLocaleString('id-ID')}`
+          : '';
+      appendAudit(
+        saved.cashierName || 'Kasir',
+        'CASHIER',
+        'SHIFT_CLOSED',
+        `Tutup ${saved.shift} (Tunai Laci: Rp ${Number(saved.expectedCashInDrawer).toLocaleString('id-ID')} • Non-Tunai: Rp ${Number(saved.nonCashSales).toLocaleString('id-ID')}${diffText})`,
+        saved.totalSales
+      );
+      persistStore();
+      return sendJson(res, 201, { ok: true, shiftClosing: saved, revision: store.revision });
     }
 
     // 14. Remote Internet Tunnel Control

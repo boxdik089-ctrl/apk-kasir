@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Product, Transaction, HeldCart, ReceiptSettings, AuditLog, SecuritySettings } from '../types';
+import type { Product, Transaction, HeldCart, ReceiptSettings, AuditLog, SecuritySettings, ShiftClosing } from '../types';
 import { DEFAULT_OWNER_PIN_HASH, DEFAULT_CASHIER_PIN_HASH } from '../utils/hash';
 
 export class KasirDatabase extends Dexie {
@@ -8,6 +8,7 @@ export class KasirDatabase extends Dexie {
   heldCarts!: Table<HeldCart, number>;
   settings!: Table<ReceiptSettings, number>;
   auditLogs!: Table<AuditLog, number>;
+  shiftClosings!: Table<ShiftClosing, number>;
 
   constructor() {
     super('KasirOfflineDB');
@@ -23,6 +24,14 @@ export class KasirDatabase extends Dexie {
       heldCarts: '++id, referenceName, timestamp',
       settings: '++id',
       auditLogs: '++id, timestamp, actor, action'
+    });
+    this.version(3).stores({
+      products: '++id, barcode, name, category, stock',
+      transactions: '++id, invoiceNumber, timestamp, cashierName, paymentMethod, status',
+      heldCarts: '++id, referenceName, timestamp',
+      settings: '++id',
+      auditLogs: '++id, timestamp, actor, action',
+      shiftClosings: '++id, closedAt, shift, cashierName'
     });
   }
 }

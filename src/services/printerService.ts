@@ -1,5 +1,5 @@
 import { EscPosBuilder } from './escpos';
-import type { Transaction, ReceiptSettings, ElectronPrinterInfo } from '../types';
+import type { Transaction, ReceiptSettings, ElectronPrinterInfo, ShiftClosing } from '../types';
 
 export class PrinterService {
   private static bluetoothDevice: any = null;
@@ -205,6 +205,83 @@ export class PrinterService {
   }
 
   /**
+   * Build ESC/POS bytes for Shift Handover / Cash Drawer Closing Receipt
+   */
+  static buildShiftEscPos(
+    closing: ShiftClosing,
+    settings: ReceiptSettings
+  ): Uint8Array {
+    const builder = new EscPosBuilder();
+    const cols = settings.paperWidth === '80mm' ? 48 : 32;
+    const sep = settings.separatorChar || '-';
+
+    if (settings.openCashDrawer) {
+      builder.openCashDrawer();
+    }
+
+    builder.align('center');
+    builder.bold(true).fontSize('double-size');
+    builder.line(settings.storeName || 'SENJA COFFEE');
+    builder.bold(false).fontSize('normal');
+    builder.bold(true).line('REKAP TUTUP SHIFT');
+    builder.bold(false);
+    builder.separator(sep, cols);
+
+    builder.align('left');
+    builder.twoColumn('Waktu:', this.formatDate(closing.closedAt), cols);
+    builder.twoColumn('Shift:', closing.shift, cols);
+    builder.twoColumn('Kasir:', closing.cashierName || 'Kasir', cols);
+    builder.twoColumn('Struk Selesai:', `${closing.transactionCount}`, cols);
+    if (closing.voidCount > 0) {
+      builder.twoColumn('Struk Batal:', `${closing.voidCount}`, cols);
+    }
+
+    builder.separator(sep, cols);
+    builder.bold(true).line('RINCIAN PENJUALAN');
+    builder.bold(false);
+    builder.twoColumn('Tunai:', this.formatRupiah(closing.cashSales), cols);
+    builder.twoColumn('QRIS:', this.formatRupiah(closing.qrisSales), cols);
+    builder.twoColumn('Transfer:', this.formatRupiah(closing.transferSales), cols);
+    builder.twoColumn('Debit / EDC:', this.formatRupiah(closing.debitSales), cols);
+    if (closing.kasbonSales > 0) {
+      builder.twoColumn('Member/Tab:', this.formatRupiah(closing.kasbonSales), cols);
+    }
+    builder.bold(true);
+    builder.twoColumn('TOTAL OMZET:', this.formatRupiah(closing.totalSales), cols);
+    builder.bold(false);
+
+    builder.separator(sep, cols);
+    builder.bold(true).line('UANG DI LACI KASIR');
+    builder.bold(false);
+    builder.twoColumn('Modal Awal Laci:', this.formatRupiah(closing.openingCash), cols);
+    builder.twoColumn('+ Jual Tunai:', this.formatRupiah(closing.cashSales), cols);
+    builder.bold(true).fontSize('double-height');
+    builder.twoColumn('TOTAL LACI:', this.formatRupiah(closing.expectedCashInDrawer), cols);
+    builder.bold(false).fontSize('normal');
+
+    if (closing.actualCashInDrawer !== undefined) {
+      builder.twoColumn('Uang Fisik:', this.formatRupiah(closing.actualCashInDrawer), cols);
+      const diff = closing.cashDifference || 0;
+      const diffLabel =
+        diff === 0 ? 'PAS' : diff > 0 ? `+${this.formatRupiah(diff)}` : `-${this.formatRupiah(Math.abs(diff))}`;
+      builder.twoColumn('Selisih Kas:', diffLabel, cols);
+    }
+
+    if (closing.notes) {
+      builder.separator(sep, cols);
+      builder.line('Catatan: ' + closing.notes);
+    }
+
+    builder.separator(sep, cols);
+    builder.align('center');
+    builder.line('Serah Terima: Kasir / Owner');
+    builder.feed(3);
+    builder.cut();
+
+    return builder.getBytes();
+  }
+
+  /**
    * Method 1: Print directly using Windows Printer Driver (USB / Bluetooth paired)
    */
   static async printViaSystem(
@@ -250,11 +327,10 @@ export class PrinterService {
   }
 
   /**
-   * Method 2: Direct Bluetooth Printing (Web Bluetooth API)
+   * Shared raw ESC/POS Bluetooth byte sender
    */
-  static async printViaBluetooth(
-    transaction: Transaction,
-    settings: ReceiptSettings
+  private static async sendBluetoothBytes(
+    bytes: Uint8Array
   ): Promise<{ success: boolean; message: string }> {
     if (!('bluetooth' in navigator)) {
       return {
@@ -264,12 +340,9 @@ export class PrinterService {
     }
 
     try {
-      const bytes = await this.buildEscPos(transaction, settings);
-
       let characteristic = this.bluetoothCharacteristic;
 
       if (!characteristic) {
-        // Request bluetooth device
         const device = await (navigator as any).bluetooth.requestDevice({
           filters: [
             { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
@@ -284,7 +357,6 @@ export class PrinterService {
           ],
           acceptAllDevices: false
         }).catch(async () => {
-          // Fallback accept all devices if specific UUID filter is not matched
           return await (navigator as any).bluetooth.requestDevice({
             acceptAllDevices: true,
             optionalServices: [
@@ -303,7 +375,6 @@ export class PrinterService {
         const server = await device.gatt.connect();
         this.bluetoothDevice = device;
 
-        // Find writable characteristic
         const services = await server.getPrimaryServices();
         for (const service of services) {
           const chars = await service.getCharacteristics();
@@ -322,7 +393,6 @@ export class PrinterService {
         return { success: false, message: 'Karakteristik write Bluetooth thermal printer tidak ditemukan.' };
       }
 
-      // Send bytes in chunks of 512 bytes to avoid buffer overflow
       const chunkSize = 512;
       for (let i = 0; i < bytes.length; i += chunkSize) {
         const chunk = bytes.slice(i, i + chunkSize);
@@ -337,10 +407,10 @@ export class PrinterService {
   }
 
   /**
-   * Method 3: Direct USB / Serial COM Port Printing (Web Serial API)
+   * Shared raw ESC/POS USB Serial byte sender
    */
-  static async printViaSerial(
-    transaction: Transaction,
+  private static async sendSerialBytes(
+    bytes: Uint8Array,
     settings: ReceiptSettings
   ): Promise<{ success: boolean; message: string }> {
     if (!('serial' in navigator)) {
@@ -351,8 +421,6 @@ export class PrinterService {
     }
 
     try {
-      const bytes = await this.buildEscPos(transaction, settings);
-
       let port = this.serialPort;
       if (!port) {
         port = await (navigator as any).serial.requestPort();
@@ -372,6 +440,28 @@ export class PrinterService {
   }
 
   /**
+   * Method 2: Direct Bluetooth Printing (Web Bluetooth API)
+   */
+  static async printViaBluetooth(
+    transaction: Transaction,
+    settings: ReceiptSettings
+  ): Promise<{ success: boolean; message: string }> {
+    const bytes = await this.buildEscPos(transaction, settings);
+    return await this.sendBluetoothBytes(bytes);
+  }
+
+  /**
+   * Method 3: Direct USB / Serial COM Port Printing (Web Serial API)
+   */
+  static async printViaSerial(
+    transaction: Transaction,
+    settings: ReceiptSettings
+  ): Promise<{ success: boolean; message: string }> {
+    const bytes = await this.buildEscPos(transaction, settings);
+    return await this.sendSerialBytes(bytes, settings);
+  }
+
+  /**
    * Universal Smart Print dispatcher: picks the right mode based on user setting
    */
   static async print(
@@ -385,6 +475,25 @@ export class PrinterService {
       return await this.printViaSerial(transaction, settings);
     } else {
       // Default: Windows Driver System Spooler (supports both USB & Bluetooth paired drivers)
+      return await this.printViaSystem(receiptElementId, settings);
+    }
+  }
+
+  /**
+   * Print Shift Handover / Rekap Tutup Kasir Receipt
+   */
+  static async printShiftClosing(
+    receiptElementId: string,
+    closing: ShiftClosing,
+    settings: ReceiptSettings
+  ): Promise<{ success: boolean; message: string }> {
+    if (settings.printerMode === 'bluetooth') {
+      const bytes = this.buildShiftEscPos(closing, settings);
+      return await this.sendBluetoothBytes(bytes);
+    } else if (settings.printerMode === 'serial') {
+      const bytes = this.buildShiftEscPos(closing, settings);
+      return await this.sendSerialBytes(bytes, settings);
+    } else {
       return await this.printViaSystem(receiptElementId, settings);
     }
   }
