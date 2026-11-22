@@ -79,16 +79,22 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  const allNavItems: { id: AppTab; label: string; icon: any; ownerOnly?: boolean }[] = [
+  const ownerNavItems: { id: AppTab; label: string; icon: any }[] = [
+    { id: 'owner', label: 'Owner', icon: Shield },
+    { id: 'reports', label: 'Laporan', icon: BarChart3 },
+    { id: 'products', label: 'Katalog Menu', icon: Coffee },
+    { id: 'receipt', label: 'Desain Struk', icon: FileText },
+    { id: 'printer', label: 'Printer', icon: Printer }
+  ];
+
+  const cashierNavItems: { id: AppTab; label: string; icon: any }[] = [
     { id: 'pos', label: 'Kasir', icon: ShoppingBag },
     { id: 'products', label: 'Katalog Menu', icon: Coffee },
     { id: 'reports', label: 'Laporan', icon: BarChart3 },
-    { id: 'printer', label: 'Printer', icon: Printer },
-    { id: 'receipt', label: 'Desain Struk', icon: FileText, ownerOnly: true },
-    { id: 'owner', label: 'Owner', icon: Shield, ownerOnly: true }
+    { id: 'printer', label: 'Printer', icon: Printer }
   ];
 
-  const navItems = allNavItems.filter((item) => !item.ownerOnly || userRole === 'OWNER');
+  const navItems = userRole === 'OWNER' ? ownerNavItems : cashierNavItems;
 
   return (
     <header className="bg-[#FAF8F5] border-b border-[#E5DDD0] select-none flex-shrink-0">
@@ -145,10 +151,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onLockToCashier}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EAF3EC] hover:bg-[#DCECE0] text-[#285A3B] border border-[#C5E0CE] rounded-lg text-[11px] sm:text-xs font-bold transition-colors active:scale-[0.98]"
-              title="Kunci kembali ke mode Kasir"
+              title="Pindah ke mode Kasir"
             >
               <Unlock className="w-3.5 h-3.5" />
-              <span>Owner • Kunci</span>
+              <span>Owner • Ke Kasir</span>
             </button>
           ) : (
             <button

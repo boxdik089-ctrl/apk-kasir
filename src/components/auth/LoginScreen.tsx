@@ -145,10 +145,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
             <div className="hidden md:block pt-3 border-t border-[#382C24] space-y-2.5">
               <div className="text-[11px] uppercase tracking-wider font-bold text-[#B39F8B]">
-                Terminal Kasir & Laporan
+                {role === 'OWNER' ? 'Panel Owner & Pemantauan' : 'Terminal Kasir'}
               </div>
               <p className="text-xs text-[#DFD3C5] leading-relaxed">
-                Catat pesanan Hot/Dingin, kelola Open Bill, cetak struk thermal, dan pantau omzet shift secara real-time.
+                {role === 'OWNER'
+                  ? 'Pantau omzet shift pagi dan siang, cek riwayat transaksi, atur desain struk, serta kelola akses remote secara real-time.'
+                  : 'Catat pesanan Hot/Dingin, kelola Open Bill meja, proses pembayaran tunai/QRIS, dan cetak struk thermal.'}
               </p>
             </div>
           </div>
